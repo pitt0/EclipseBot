@@ -1,5 +1,6 @@
-from typing import Literal, Type, Any
+from typing import Literal, Optional, Type, Any
 from colorthief import ColorThief
+from discord import DMChannel
 
 import asyncio
 import discord
@@ -34,45 +35,49 @@ class Player(discord.User):
     __slots__ = (
         
         '_user',
+        '__role',
+        '__channel',
 
-        '_activity',
-        '_busy',
+        '__activity',
+        '__busy',
 
-        '_chealth',
-        '_cstamina',
+        '__chealth',
+        '__cstamina',
         '_coordinates',
-        '_overtime_damage',
-        '_stats',
+        '__overtime_damage',
+        '__stats',
         '_status',
-        '_team',
+        '__team',
 
         'Description',
-        '_weapon',
+        '__weapon',
         'Position'
 
     )
 
-    def __init__(self, user: discord.User):
+    def __init__(self, user: discord.User, role = None):
         self._user = user
+        self.__role = role # Used in bot subclass
+        self.__channel: discord.TextChannel = None
         
-        self._team: ETeam = None
+        self.__team: ETeam = None
         self._coordinates: dict[str, list[Position]] = None
         
-        self._weapon: _Weapon = None
+        self.__weapon: _Weapon = None
         try:
-            self._stats: dict[str, int | float] = statistics[self.__class__.__name__]
+            self.__stats: dict[str, int | float] = statistics[role or self.__class__.__name__]
         except KeyError:
-            self._stats = {'Health': 12, 'Stamina': 13}
+            self.__stats = {'Health': 12, 'Stamina': 13, 'Speed': 15}
             print(f'{self.__class__.__name__} is not into stats')
 
-        self._chealth = round(self._stats['Health'])
-        self._cstamina = round(self._stats['Stamina'])
+        self.__chealth = round(self.__stats['Health'])
+        self.__cstamina = round(self.__stats['Stamina'])
 
         self._status = Status()
-        self._overtime_damage = OverTimeDamage()
+        self.__overtime_damage = OverTimeDamage()
 
-        self._activity = EActivity.Idle
-        self._busy: asyncio.Future[bool] | None = None
+        self.__activity = EActivity.Idle
+        self.__busy: asyncio.Future[bool] | None = None
 
         self.Description: str = ''
         self.Position: Position = None
@@ -94,26 +99,26 @@ class Player(discord.User):
         If user is doing nothing, :value:`EActivity.Idle` is returned.
         If user's activity is not :value:`EActivity.Idle`, user has a waiting timer.
         """
-        return self._activity
+        return self.__activity
 
     @activity.setter
     def activity(self, value: EActivity) -> None:
-        self._activity = value
+        self.__activity = value
         if value == EActivity.Idle:
-            if self._busy is not None and not self._busy.done():
-                self._busy.set_result(False)
-            self._busy = None
+            if self.__busy is not None and not self.__busy.done():
+                self.__busy.set_result(False)
+            self.__busy = None
         else:
-            if self._busy is not None:
+            if self.__busy is not None:
                 return
             loop = asyncio.get_running_loop()
-            self._busy = loop.create_future()
+            self.__busy = loop.create_future()
 
     async def wait_ready(self):
         if self.activity == EActivity.Idle:
             return
-        assert self._busy is not None
-        return await self._busy
+        assert self.__busy is not None
+        return await self.__busy
 
     async def send(
         self,
@@ -121,7 +126,20 @@ class Player(discord.User):
         embed: discord.Embed = None, 
         view: discord.ui.View = None
     ):
+        if self.__channel is not None:
+            return await self.__channel.send(content, embed=embed, view=view)
         return await self._user.send(content, embed=embed, view=view)
+
+    async def SetChannel(self, channel: discord.TextChannel | int) -> None:
+        if type(channel) is int:
+            guild = self._user.mutual_guilds[0]
+            channel = await guild.fetch_channel(channel) 
+            
+        self.__channel = channel
+
+    @property
+    def bot(self) -> bool:
+        return self._user.bot
 
     @property
     def name(self) -> str:
@@ -138,6 +156,10 @@ class Player(discord.User):
     @property
     def id(self) -> int:
         return self._user.id
+
+    @property
+    def bot(self) -> bool:
+        return self._user.bot
         
     @property
     def color(self) -> discord.Colour:
@@ -152,21 +174,21 @@ class Player(discord.User):
             if all(c > 200 or c < 30 for c in color):
                 palette.remove(color)
         return discord.Colour.from_rgb(*palette[0])"""
-    
+
     @property
     def team(self) -> ETeam:
         """:enum:`ETeam`: The team the user is part of."""
-        return self._team
+        return self.__team
 
     @team.setter
     def team(self, value: ETeam):
-        if value == self._team:
+        if value == self.__team:
             raise AlreadyInTeam
-        self._team = value
+        self.__team = value
 
     @property
     def role(self):
-        return self.__class__.__name__
+        return self.__role or self.__class__.__name__
 
     @property
     def Alive(self) -> bool:
@@ -174,96 +196,96 @@ class Player(discord.User):
 
     @property
     def Health(self) -> int:
-        return round(self._stats['Health'])
+        return round(self.__stats['Health'])
 
     @Health.setter
     def Health(self, value: int) -> int:
         assert value > 0
-        self._stats['Health'] = value
+        self.__stats['Health'] = value
     @property
     def cHealth(self) -> int:
-        return round(self._chealth)
+        return round(self.__chealth)
 
     @cHealth.setter
     def cHealth(self, value: int) -> int:
         if value < 0:
             value = 0
-        self._chealth = value
+        self.__chealth = value
 
     @property
     def Stamina(self) -> int:
-        return round(self._stats['Stamina'])
+        return round(self.__stats['Stamina'])
 
     @Stamina.setter
     def Stamina(self, value: int) -> int:
         assert value >= 0 
-        self._stats['Stamina'] = value
+        self.__stats['Stamina'] = value
 
     @property
     def cStamina(self) -> int:
-        return round(self._cstamina)
+        return round(self.__cstamina)
 
     @cStamina.setter
     def cStamina(self, value: int) -> int:
         assert value >= 0
         if value > self.Stamina:
             value = self.Stamina
-        self._cstamina = value
+        self.__cstamina = value
 
     @property
     def Strength(self) -> int:
-        return round(self._stats['Strength'])
+        return round(self.__stats['Strength'])
 
     @Strength.setter
     def Strength(self, value: int):
         assert value > 0
-        self._stats['Strength'] = value
+        self.__stats['Strength'] = value
 
     @property
     def Armor(self) -> int:
-        return round(self._stats['Armor'])
+        return round(self.__stats['Armor'])
 
     @Armor.setter
     def Armor(self, value: int):
         assert value > 0
-        self._stats['Armor'] = value
+        self.__stats['Armor'] = value
     
     @property
     def Intelligence(self) -> int:
-        return round(self._stats['Intelligence'])
+        return round(self.__stats['Intelligence'])
 
     @Intelligence.setter
     def Intelligence(self, value: int):
         assert value > 0
-        self._stats['Intelligence'] = value
+        self.__stats['Intelligence'] = value
 
     @property
     def Perception(self) -> int:
-        return round(self._stats['Perception'])
+        return round(self.__stats['Perception'])
 
     @Perception.setter
     def Perception(self, value: int):
         assert value > 0
-        self._stats['Perception'] = value
+        self.__stats['Perception'] = value
 
     @property
     def Speed(self) -> int:
-        return round(self._stats['Speed'])
+        return round(self.__stats['Speed'])
 
     @Speed.setter
     def Speed(self, value: int):
         assert value > 0
-        self._stats['Speed'] = value
+        self.__stats['Speed'] = value
 
     @property
     def CritDamage(self) -> float:
-        return round(self._stats['CritDamage'], 2)
+        return round(self.__stats['CritDamage'], 2)
 
     @CritDamage.setter
     def CritDamage(self, value: float):
         """Should never be used"""
         assert value > 0
-        self._stats['CritDamage'] = value
+        self.__stats['CritDamage'] = value
         
     @property
     def CritChance(self) -> int:
@@ -281,7 +303,7 @@ class Player(discord.User):
 
     @property
     def Weapon(self):
-        return self._weapon
+        return self.__weapon
 
     @property
     def Abilities(self) -> dict[str, dict[str, Any]]:
@@ -296,8 +318,8 @@ class Player(discord.User):
         return self.Weapon.HolderImage
 
     def EquipWeapon(self, weapon: Type[_Weapon]):
-        self._weapon = weapon(self)
-        self._overtime_damage.set_player(self)
+        self.__weapon = weapon(self)
+        self.__overtime_damage.set_player(self)
 
         self.Health = round(self.Health * self.Weapon.Health)
         self.Stamina = round(self.Stamina * self.Weapon.Stamina)
@@ -435,7 +457,7 @@ class Player(discord.User):
         type: :enum:`EWound`
             The type of damage. Either :var:`EWound.Wound` or :var:`EWound.Burn`
         """
-        return self._overtime_damage._add_wound(source, damage, turns, type)
+        return self.__overtime_damage._add_wound(source, damage, turns, type)
 
     def BaseAttack(self, target: 'Player'):
         return self.Weapon.BaseAttack(target)
@@ -491,7 +513,7 @@ class Player(discord.User):
         self.Weapon.EndTurn()
         self.RestoreStamina()
         self._status._end_turn()
-        otd = self._overtime_damage._end_turn()
+        otd = self.__overtime_damage._end_turn()
         if otd == 0:
             return 
         log = f"{self.name} took {otd} damage from Wounds and Burns."

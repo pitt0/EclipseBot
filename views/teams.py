@@ -45,9 +45,9 @@ class Teams(discord.ui.View):
         return user in self.players
     
     def adapt_bots(self):
-        shadows = [player for player in self.players if player.team is ETeam.Shadow]
-        nobles = [player for player in self.players if player.team is ETeam.Noble]
         for player in self.players:
+            shadows = [player for player in self.players if player.team is ETeam.Shadow]
+            nobles = [player for player in self.players if player.team is ETeam.Noble]
             if player.team is None:
                 if len(shadows) < len(nobles):
                     player.team = ETeam.Shadow
@@ -56,10 +56,11 @@ class Teams(discord.ui.View):
 
     async def check_ready(self) -> bool:
         children: list[discord.Button] = self.children
+        non_bots = [player for player in self.players if not player.bot]
         ready_btn = children[2]
         if any(player.team is None for player in self.players):
             
-            if all(player.team is None and player._user.bot for player in self.players):
+            if all(player.team is not None for player in non_bots):
                 self.adapt_bots()
                 ready_btn.disabled = False
                 return True
@@ -68,6 +69,12 @@ class Teams(discord.ui.View):
             return False
         
         if all(player.team is ETeam.Shadow for player in self.players) or all(player.team is ETeam.Noble for player in self.players):
+            
+            if non_bots != []:
+                self.adapt_bots()
+                ready_btn.disabled = False
+                return True
+
             ready_btn.disabled = True
             return False
 

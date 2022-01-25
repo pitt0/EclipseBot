@@ -1,3 +1,4 @@
+from configparser import NoOptionError
 from discord.ext import commands
 from dataclasses import dataclass
 
@@ -12,11 +13,11 @@ import game
 
 @dataclass
 class Turn:
-    prob: bool
-    buff: Buff
+    prob: int = 0
+    buff: Buff = None
     _turn: int = 0
 
-    def Pass(self, prob: bool, buff: Buff):
+    def Pass(self, prob: int, buff: Buff):
         self.prob = prob
         self.buff = buff
         self._turn += 1
@@ -34,20 +35,26 @@ class Game(commands.Cog):
 
         self.bot = bot
         self.inGame: bool = False
+        
         self.players: list[Player] = []
         self.turn = Turn()
+
+        self.creator: discord.Member = NoOptionError
         self.messages: list[discord.Message] = []
 
+        self.channel: discord.TextChannel = None
+
+
     @commands.Cog.listener()
-    async def on_command_error(self, error: Exception):
+    async def on_command_error(self, ctx: commands.Context, error: Exception):
 
         self.inGame = False
         raise error
 
-    async def lobby(self, ctx: commands.Context):
+    async def lobby(self):
         
-        lobby = Lobby(ctx.author)
-        t = await ctx.send(embed=lobby.embed, view=lobby)
+        lobby = Lobby(self.creator, self.bot)
+        t = await self.channel.send(embed=lobby.embed, view=lobby)
         lobby.response = t
 
         await lobby.wait()
@@ -55,13 +62,13 @@ class Game(commands.Cog):
         await t.delete()
         return lobby.players
 
-    async def teams(self, ctx: commands.Context):
+    async def teams(self):
 
         for player in self.players:
             player.activity = game.EActivity.ChoosingTeam
 
         teams = Teams(self.players)
-        t = await ctx.send(embed=teams.embed, view=teams)
+        t = await self.channel.send(embed=teams.embed, view=teams)
         teams.response = t
 
         await teams.wait()
@@ -74,14 +81,33 @@ class Game(commands.Cog):
         shops: list[Shop] = []
         
         for player in self.players:
-
             player.activity = game.EActivity.ChoosingWeapon
             await player.send(embed=self.team_embed)
             
             shop = Shop(player)
             shops.append(shop)
-            msg = await player.send(embed=shop.embed, view=shop)
-            shop.message = msg
+            if shop.content is not None:
+                await player.send(shop.content)
+            else:
+                await player.send(embed=shop.embed, view=shop)
+            
+            if player.bot:
+                
+                def check(ans: discord.Message):
+                    return ans.author == player
+
+                role = await self.bot.wait_for('message', check=check)
+                match player.team:
+                    case game.ETeam.Shadow:
+                        for opt in SHADOW_ITEMS:
+                            if opt.label == role:
+                                break
+                        shadow_item(opt.value, player._user, shop)
+                    case game.ETeam.Noble:
+                        for opt in NOBLE_ITEMS:
+                            if opt.label == role:
+                                break
+                        noble_item(opt.value, player._user, shop)
 
         for shop in shops:
             await shop.wait()
@@ -93,6 +119,7 @@ class Game(commands.Cog):
             self.players[index] = shop.player
 
             del shop
+        del shops
         
     @property
     def team_embed(self) -> discord.Embed:
@@ -167,8 +194,13 @@ class Game(commands.Cog):
 
     @commands.command(name='game')
     async def start_game(self, ctx: commands.Context):
-        
         await ctx.message.delete()
+        self.creator = ctx.author
+        
+        self.channel = await self.bot.fetch_channel(933784356697288776)
+        if ctx.channel.id != 933784356697288776:
+            await ctx.send(f'Game created in {self.channel.mention}')
+
         if self.inGame:
             await ctx.send('A game instance is already running')
             return
@@ -176,14 +208,17 @@ class Game(commands.Cog):
         self.inGame = True
 
         # Lobby
-        players = await self.lobby(ctx)
+        players = await self.lobby()
         if len(players) in (0, 1) or all(usr.bot for usr in players):
             raise GameEnded('Game has ended at lobby')
 
         self.players = [Player(user) for user in players]
+        for player in self.players:
+            if player.bot:
+                await player.SetChannel(933784403098873906)
         
         # Team Choice
-        players = await self.teams(ctx)
+        players = await self.teams()
         if any(player.team is None for player in self.players):
             raise GameEnded('Game has ended at team selection.')
 
@@ -211,24 +246,32 @@ class Game(commands.Cog):
             )
             self.turn.Pass(prob, buff)            
 
-            # Start of InnerTurn
+            # Start of Turn
             for cPlayer in self.players:
 
                 if not cPlayer.Alive:
                     continue
 
-                move = await self.GeneralTurn(cPlayer)
-                cPlayer.AfterAttack()
+                if cPlayer.bot:
+                    embed = await self.TurnRecap(f'{cPlayer.name} has passed')
+                    for player in self.players:
+                        await player.send(embed=embed)
+                
+                else:
 
-                for message in self.messages:
-                    await message.delete()
+                    move = await self.GeneralTurn(cPlayer)
+                    cPlayer.AfterAttack()
 
-                embed = await self.TurnRecap(move.result)
-                for player in self.players:
-                    await player.send(embed=embed)
+                    for message in self.messages:
+                        await message.delete()
 
-                if self.CheckTeams():
-                    await self.EndGame()
+                    embed = await self.TurnRecap(move.result)
+                    for player in self.players:
+                        await player.send(embed=embed)
+
+
+                    if self.CheckTeams():
+                        await self.EndGame()
 
             # End Turn
             for player in self.players:
@@ -236,11 +279,16 @@ class Game(commands.Cog):
                 if log:
                     for player in self.players:
                         await player.send(log)
+
                 
                 if self.CheckTeams():
                     await self.EndGame()
         
         await self.EndGame()
+
+    @commands.command(name='restart')
+    async def restart(self, ctx: commands.Context):
+        raise GameEnded('Restarted')
 
 
 def setup(bot: commands.Bot):

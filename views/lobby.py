@@ -2,10 +2,26 @@ from discord.ext import commands
 
 import discord
 import datetime
-import random
 import pytz
 
 from resources import *
+
+
+class Players(list):
+
+    def append(self, user: discord.Member, view: 'Lobby') -> None:
+        if len(self) == 10:
+            children: list[discord.Button] = view.children
+            children[0].disabled = True
+            children[2].disabled = True
+        return super().append(user)
+
+    def remove(self, user: discord.Member, view: 'Lobby') -> None:
+        if len(self) < 10:
+            children: list[discord.Button] = view.children
+            children[0].disabled = False
+            children[2].disabled = False
+        return super().remove(user)
 
 
 class Lobby(discord.ui.View):
@@ -20,7 +36,8 @@ class Lobby(discord.ui.View):
 
     def __init__(self, player: discord.User | discord.Member, bot: commands.Bot):
         super().__init__()
-        self.players: list[discord.User] = [player]
+        self.players = Players()
+        self.players.append(player, self)
         self.bot = bot
         
         embed = discord.Embed(title='Lobby', color=discord.Color.from_rgb(3, 97, 178))
@@ -52,10 +69,7 @@ class Lobby(discord.ui.View):
             await interaction.response.send_message("You are already in the lobby", ephemeral=True)
             return
          
-        self.players.append(interaction.user)
-
-        if len(self.players) == 10:
-            button.disabled = True
+        self.players.append(interaction.user, self)
 
         await self.update_embed()
         await interaction.response.edit_message(embed=self.embed, view=self)
@@ -76,16 +90,20 @@ class Lobby(discord.ui.View):
         await self.update_embed()
         await interaction.response.edit_message(embed=self.embed, view=self)
 
-    @discord.ui.button(label='Add Bot')
+    @discord.ui.button(label='Add Cortana')
     async def _add_bot(self, button: discord.Button, interaction: discord.Interaction):
         if interaction.user not in self.players:
             await interaction.response.send_message("You are not in the lobby", ephemeral=True)
             return
 
-        self.players.append(random.choice([usr for usr in self.bot.get_all_members() if usr.bot]))
-
-        if len(self.players) == 10:
-            button.disabled = True
+        bot = await self.bot.fetch_user(862653014400434187)
+        match button.label:
+            case 'Add Cortana':
+                self.players.append(bot, self)
+                button.label = 'Remove Cortana'
+            case 'Remove Cortana':
+                self.players.remove(bot, self)
+                button.label = 'Add Cortana'
 
         await self.update_embed()
         await interaction.response.edit_message(embed=self.embed, view=self)

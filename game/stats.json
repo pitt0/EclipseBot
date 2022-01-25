@@ -74,7 +74,7 @@
         "Perception": 100,
         "Speed": 98,
         "Dodge": 0.32,
-        "CriticalDamage": 1
+        "CritDamage": 1
     },
     "Archer": {
         "Health": 1141,
