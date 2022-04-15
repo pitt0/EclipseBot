@@ -2,7 +2,8 @@ from typing import TYPE_CHECKING
 from enum import Enum, auto
 from dataclasses import dataclass
 
-from ...Resources import EStatus
+from game.Resources import EWound
+
 
 if TYPE_CHECKING:
     from .player import Player
@@ -12,7 +13,9 @@ __all__ = (
     'AlreadyInTeam',
     'EActivity',
     'ETeam',
-    'PositionNotFound'
+    'PositionNotFound',
+    'AS',
+    'Position'
 )
 
 class EActivity(Enum):
@@ -25,6 +28,10 @@ class ETeam(Enum):
     Shadow = auto()
     Noble = auto()
 
+class AS(Enum):
+    Player = auto()
+    Enemy = auto()
+
 class AlreadyInTeam(BaseException):
     """Raised when a player wants to switch to a team where he already is."""
 
@@ -36,4 +43,31 @@ class _OTD:
     source: 'Player'
     damage: int
     turns: int
-    type: EStatus
+    type: EWound
+
+@dataclass
+class Position:
+    x: int
+    y: int
+
+    def __repr__(self) -> str:
+        return f'{self.x}, {self.y}'
+    
+    def __str__(self) -> str:
+        return f'{self.x}, {self.y}'
+
+    def set_x(self, x: int) -> 'Position':
+        self.x = x
+        return self
+    
+    def set_y(self, y: int) -> 'Position':
+        self.y = y
+        return self
+
+    def add_x(self, x: int) -> 'Position':
+        self.x += x
+        return self
+
+    def add_y(self, y: int) -> 'Position':
+        self.y += y
+        return self

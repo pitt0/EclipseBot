@@ -1,85 +1,75 @@
-from typing import Callable
-
 from discord import SelectOption
 import discord
 
-from game import Player
+from game import Player, Ability
 import resources as res
 import game
 
-__all__ = ('Info')
+__all__ = ('Info',)
 
-class Ability(discord.ui.Button['Info']):
+class AbilityData(discord.ui.Button['Info']):
 
-    def __init__(self, ability: str):
-        super().__init__(label=ability, row=1)
+    def __init__(self, ability: Ability):
+        super().__init__(label=str(ability), row=1)
+        self.ability = ability
 
     async def callback(self, interaction: discord.Interaction):
-        self.ability = self.view.player.Abilities[self.label]
+        assert self.view is not None
         self.view.embed = await res.edit_embed(
             embed=self.view.embed,
             title=self.label,
             description=f"of {self.view.player.display_name}'s {self.view.player.Weapon.Name}",
-            fields={"Description": [self.ability["Description"], False]},
+            fields={"Description": (self.ability.long, False)},
             image=self.view.player.Weapon.Image
         )
         
-        # children may not have buttons
+        # children include also selection
         for button in self.view.children:
             if not hasattr(button, '_selected_values') :
-                button.disabled = False
+                button.disabled = False # type: ignore
         
         self.disabled = True
         await interaction.response.edit_message(embed=self.view.embed, view=self.view)
         
 
 class Info(discord.ui.View):
+
     def __init__(self, player: Player):
         self.player = player
-        
+        self.embed = self.__create_embed(player)
+        super().__init__()
+
+    def __create_embed(self, player: Player) -> discord.Embed:
         embed = discord.Embed(title='Statistics', color=player.color)
         embed.set_thumbnail(url=player.Weapon.Image)
         embed.set_image(url=player.Image)
-        embed.add_field(name="Class", value=self.player.role, inline=True)
-        embed.add_field(name='Weapon', value=self.player.Weapon.Name, inline=True)
-        embed.add_field(name='Status', value='-', inline=False)
-        embed.add_field(name='Health', value=f'{self.player.cHealth}/{self.player.Health}', inline=True)
-        embed.add_field(name='Stamina', value=f'{self.player.cStamina}/{self.player.Stamina}', inline=True)
-        embed.add_field(name='Strength', value=self.player.Strength, inline=True)
-        embed.add_field(name='Armor', value=self.player.Armor, inline=True)
-        embed.add_field(name='Intelligence', value=self.player.Intelligence, inline=True)
-        embed.add_field(name='Perception', value=self.player.Perception, inline=True)
-        embed.add_field(name='Speed', value=self.player.Speed, inline=True)
-        embed.add_field(name='Critical Strike Damage', value=f"{self.player.CritDamage:.0%}", inline=True)
-        embed.add_field(name='Critical Strike Chance', value=f"{self.player.CritChance}%", inline=True)
+        for key, value in player.info:
+            embed.add_field(name=key, value=value, inline=True)
         embed.set_footer(text='`Armor` is applied against `Base Attacks`, `Perception` is applied against `Abilities`')
-        self.embed = embed
-
-        super().__init__()
+        return embed
 
     def reset_default_option(self, select: discord.ui.Select):
         for opt in select.options:
             opt.default = False
         return select
 
-    def remove_buttons(self):
-        children: list[discord.ui.Item] = self.children.copy()
-        for child in children:
-            if not hasattr(child, '_selected_values'):
-                self.remove_item(child)
+    def remove_buttons(self, select: discord.ui.Select):
+        self = self.clear_items()
+        self.add_item(select)
 
-    def add_ability_buttons(self, fields: dict[str, list[Callable, bool]]) -> dict[str, list[Callable, bool]]:
+    def _create_ability_buttons(self) -> dict[str, tuple[str, bool]]:
+        _fields: dict[str, tuple[str, bool]] = {}
         for ability in self.player.Abilities:
-            fields[ability] = [self.player.Abilities[ability]["Brief"], False]
-            self.add_item(Ability(ability))
-        return fields
+            _fields[str(Ability)] = (ability.brief, False)
+            self.add_item(AbilityData(ability))
+        return _fields
 
     @discord.ui.select(options=[SelectOption(label="Statistics", default=True), SelectOption(label="Weapon"), SelectOption(label="Exit")])
-    async def selection(self, select: discord.ui.Select, interaction: discord.Interaction):
-        self.remove_buttons()
+    async def selection(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.remove_buttons(select)
         select = self.reset_default_option(select)
 
-        click = interaction.data['values'][0]
+        click = interaction.data['values'][0] # type: ignore
         match click:
             
             case 'Statistics':
@@ -88,20 +78,7 @@ class Info(discord.ui.View):
                     embed=self.embed,
                     title="Statistics",
                     thumbnail=self.player.Weapon.Image,
-                    fields={
-                        "Class": [self.player.role, True],
-                        "Weapon": [self.player.Weapon.Name, True],
-                        "Status": ['-', False],
-                        "Health": [f"{self.player.cHealth}/{self.player.Health}", True],
-                        "Stamina": [f"{self.player.cStamina}/{self.player.Stamina}", True],
-                        "Strength": [self.player.Strength, True],
-                        "Armor": [self.player.Armor, True],
-                        "Intelligence": [self.player.Intelligence, True],
-                        "Perception": [self.player.Perception, True],
-                        "Speed": [self.player.Speed, True],
-                        "Critical Strike Damage": [f"{self.player.CritDamage:.0%}", True],
-                        "Critical Strike Chance": [f"{self.player.CritChance}%", True]
-                    },
+                    fields={key: (value, True) for key, value in self.player.info},
                     image=self.player.Image,
                     footer='`Armor` is applied against `Base Attacks`, `Perception` is applied against `Abilities`'
                 )
@@ -109,7 +86,7 @@ class Info(discord.ui.View):
             
             case 'Weapon': 
                 select.options[1].default = True
-                fields = self.add_ability_buttons({"Base Attack": [self.player.Weapon.BA, False]})
+                fields = self._create_ability_buttons()
                 self.embed = await res.edit_embed(
                     embed=self.embed,
                     title=f"{self.player.display_name}'s {self.player.Weapon.Name}",
@@ -120,8 +97,8 @@ class Info(discord.ui.View):
                 await interaction.response.edit_message(embed=self.embed, view=self)
             
             case 'Exit':
-                await interaction.response.defer()
-                await interaction.message.delete()
+                await interaction.response.edit_message(content='Exiting...')
+                await interaction.message.delete() # type: ignore
                 self.player.activity = game.EActivity.Idle
                 self.stop()
             

@@ -1,6 +1,6 @@
-from typing import Literal, Optional, Type, Any
-from colorthief import ColorThief
-from discord import DMChannel
+from typing import Iterable, Type
+# from colorthief import ColorThief
+# from discord import DMChannel
 
 import asyncio
 import discord
@@ -12,23 +12,25 @@ from .resources import *
 from .overtimedamage import OverTimeDamage
 from .status import Status
 
-from ...Weapons import Weapon as _Weapon
-from ...Resources import (
+
+from game.Weapons import Weapon as _Weapon
+from game.Resources import (
     EDamage, 
     EHeal, 
     EStatus, 
     ECondition, 
-    EWound
+    EWound,
+    Ability, 
+    CostType
     )
 
 
 __all__ = (
-    'Player'
+    'Player',
 )
 
 path = 'game/stats.json'
 with open(path) as f: statistics = json.load(f)
-Position = tuple[int, int]
 
 class Player(discord.User):
 
@@ -58,12 +60,12 @@ class Player(discord.User):
     def __init__(self, user: discord.User, role = None):
         self._user = user
         self.__role = role # Used in bot subclass
-        self.__channel: discord.TextChannel = None
+        self.__channel: discord.TextChannel = None # type: ignore
         
-        self.__team: ETeam = None
-        self._coordinates: dict[str, list[Position]] = None
+        self.__team: ETeam = None # type: ignore
+        self._coordinates: dict[AS, list[Position]] = None # type: ignore
         
-        self.__weapon: _Weapon = None
+        self.__weapon: _Weapon = None # type: ignore
         try:
             self.__stats: dict[str, int | float] = statistics[role or self.__class__.__name__]
         except KeyError:
@@ -80,7 +82,7 @@ class Player(discord.User):
         self.__busy: asyncio.Future[bool] | None = None
 
         self.Description: str = ''
-        self.Position: Position = None
+        self.Position: Position | None = None
         
 
     def __eq__(self, __o: object) -> bool:
@@ -104,7 +106,7 @@ class Player(discord.User):
     @activity.setter
     def activity(self, value: EActivity) -> None:
         self.__activity = value
-        if value == EActivity.Idle:
+        if value is EActivity.Idle:
             if self.__busy is not None and not self.__busy.done():
                 self.__busy.set_result(False)
             self.__busy = None
@@ -114,8 +116,8 @@ class Player(discord.User):
             loop = asyncio.get_running_loop()
             self.__busy = loop.create_future()
 
-    async def wait_ready(self):
-        if self.activity == EActivity.Idle:
+    async def wait(self):
+        if self.activity is EActivity.Idle:
             return
         assert self.__busy is not None
         return await self.__busy
@@ -123,23 +125,19 @@ class Player(discord.User):
     async def send(
         self,
         content: str | None = None, 
-        embed: discord.Embed = None, 
-        view: discord.ui.View = None
+        embed: discord.Embed | None = None, 
+        view: discord.ui.View | None = None
     ):
         if self.__channel is not None:
-            return await self.__channel.send(content, embed=embed, view=view)
-        return await self._user.send(content, embed=embed, view=view)
+            return await self.__channel.send(content, embed=embed, view=view) # type: ignore
+        return await self._user.send(content, embed=embed, view=view) # type: ignore
 
     async def SetChannel(self, channel: discord.TextChannel | int) -> None:
         if type(channel) is int:
             guild = self._user.mutual_guilds[0]
-            channel = await guild.fetch_channel(channel) 
+            channel = await guild.fetch_channel(channel) # type: ignore
             
-        self.__channel = channel
-
-    @property
-    def bot(self) -> bool:
-        return self._user.bot
+        self.__channel = channel # type: ignore
 
     @property
     def name(self) -> str:
@@ -167,13 +165,14 @@ class Player(discord.User):
         # if self._user.avatar is None:
         return discord.Colour.default()
         # TODO: Add a setting where players choose their own color
-        """image_byte = asyncio.run_coroutine_threadsafe(self._user.avatar.read(), asyncio.get_event_loop())
-        image = ColorThief(image_byte)
-        palette = image.get_palette()
-        for color in palette:
-            if all(c > 200 or c < 30 for c in color):
-                palette.remove(color)
-        return discord.Colour.from_rgb(*palette[0])"""
+
+        # image_byte = asyncio.run(self._user.avatar.read(), asyncio.get_event_loop())
+        # image = ColorThief(image_byte)
+        # palette = image.get_palette()
+        # for color in palette:
+        #     if all(c > 200 or c < 30 for c in color):
+        #         palette.remove(color)
+        # return discord.Colour.from_rgb(*palette[0])
 
     @property
     def team(self) -> ETeam:
@@ -191,6 +190,23 @@ class Player(discord.User):
         return self.__role or self.__class__.__name__
 
     @property
+    def info(self):
+        return {
+            "Class": self.role,
+            "Weapon": self.Weapon.Name,
+            "Status": '-',
+            "Health": f"{self.cHealth}/{self.Health}",
+            "Stamina": f"{self.cStamina}/{self.Stamina}",
+            "Strength": self.Strength,
+            "Armor": self.Armor,
+            "Intelligence": self.Intelligence,
+            "Perception": self.Perception,
+            "Speed": self.Speed,
+            "Critical Strike Damage": f"{self.CritDamage:.0%}",
+            "Critical Strike Chance": f"{self.CritChance}%"
+        }
+
+    @property
     def Alive(self) -> bool:
         return self.cHealth > 0
 
@@ -199,15 +215,16 @@ class Player(discord.User):
         return round(self.__stats['Health'])
 
     @Health.setter
-    def Health(self, value: int) -> int:
+    def Health(self, value: int) -> None:
         assert value > 0
         self.__stats['Health'] = value
+
     @property
     def cHealth(self) -> int:
         return round(self.__chealth)
 
     @cHealth.setter
-    def cHealth(self, value: int) -> int:
+    def cHealth(self, value: int) -> None:
         if value < 0:
             value = 0
         self.__chealth = value
@@ -217,7 +234,7 @@ class Player(discord.User):
         return round(self.__stats['Stamina'])
 
     @Stamina.setter
-    def Stamina(self, value: int) -> int:
+    def Stamina(self, value: int) -> None:
         assert value >= 0 
         self.__stats['Stamina'] = value
 
@@ -226,7 +243,7 @@ class Player(discord.User):
         return round(self.__cstamina)
 
     @cStamina.setter
-    def cStamina(self, value: int) -> int:
+    def cStamina(self, value: int) -> None:
         assert value >= 0
         if value > self.Stamina:
             value = self.Stamina
@@ -260,11 +277,11 @@ class Player(discord.User):
         self.__stats['Intelligence'] = value
 
     @property
-    def Perception(self) -> int:
+    def Perception(self) -> float:
         return round(self.__stats['Perception'])
 
     @Perception.setter
-    def Perception(self, value: int):
+    def Perception(self, value: float):
         assert value > 0
         self.__stats['Perception'] = value
 
@@ -306,9 +323,9 @@ class Player(discord.User):
         return self.__weapon
 
     @property
-    def Abilities(self) -> dict[str, dict[str, Any]]:
+    def Abilities(self) -> tuple[Ability]:
         if not self.Weapon:
-            return 
+            return (Ability('', '', '', 0, CostType.Stamina, lambda x: x, 0,),)
         return self.Weapon.Abilities
 
     @property
@@ -318,7 +335,7 @@ class Player(discord.User):
         return self.Weapon.HolderImage
 
     def EquipWeapon(self, weapon: Type[_Weapon]):
-        self.__weapon = weapon(self)
+        self.__weapon = weapon(self) # type: ignore
         self.__overtime_damage.set_player(self)
 
         self.Health = round(self.Health * self.Weapon.Health)
@@ -333,25 +350,25 @@ class Player(discord.User):
         self.Speed = round(self.Speed * self.Weapon.Speed)
         
 
-    def Coordinates(self, used: list[tuple[int, int]], role: Literal['as_player', 'as_enemy']) -> tuple[int, int]:
+    def Coordinates(self, used: Iterable['Position'], role: AS) -> 'Position':
         """Cheks for all the occupied positions on the field and finds a free one.
 
         Parameters
         ---
-        used: :class:`list[Position]`
+        used: :class:`Iterable[Position]`
             The list of the occupied positions.
-        role: :class:`Literal['as_player', 'as_enemy']`
-            Whether to search for player's position
+        role: :enum:`AS`
+            Where to search for player's position
         
         Returns
         ---
-        :class:`tuple[int, int]`
+        :class:`Position`
             Players's position.
         
         Raises
         ---
         :exc:`.PositionNotFound`
-            If there are no possible positions remained.
+            If there is no tile to place the player.
         """
         for position in self._coordinates[role]:
             if position not in used:
@@ -440,7 +457,7 @@ class Player(discord.User):
         """
         return self._status._remove_status(status)
 
-    def AddWound(self, source: 'Player', damage: int, turns: int, type: EWound):
+    def AddWound(self, source: 'Player', damage: int | float, turns: int, type: EWound):
         """Adds a Wound to :class:`Player`'s :var:`_overtime_damage`.
         
         This also automatically adds :var:`EStatus.Wounded` or :var:`EStatus.Burnt` to :class:`Player`'s :class:`Status`
@@ -457,26 +474,26 @@ class Player(discord.User):
         type: :enum:`EWound`
             The type of damage. Either :var:`EWound.Wound` or :var:`EWound.Burn`
         """
-        return self.__overtime_damage._add_wound(source, damage, turns, type)
+        return self.__overtime_damage._add_wound(source, int(damage), turns, type)
 
     def BaseAttack(self, target: 'Player'):
         return self.Weapon.BaseAttack(target)
 
-    def GetHealed(self, heal: int, type: EHeal, healer: 'Player'):
+    def GetHealed(self, heal: int | float, type: EHeal, healer: 'Player'):
         match type:
             case EHeal.Normal:
-                self.cHealth += heal
+                self.cHealth += int(heal)
                 if self.cHealth > self.Health:
                     self.cHealth = self.Health
             case EHeal.Cursed:
-                self.cHealth += heal
+                self.cHealth += int(heal)
                 self.AddWound(healer, heal//3 + heal%3, 3, EWound.Heal)
 
     def _mitigate_damage(self, damage):
         damage, self.Shield = damage - self.Shield, self.Shield - damage
         return damage
 
-    def TakeDamage(self, raw_damage: int, source: EDamage, affects_shield: bool = True) -> int:        
+    def TakeDamage(self, raw_damage: int | float, source: EDamage, affects_shield: bool = True) -> int:        
         match source:
             case EDamage.BaseAttack:
                 if affects_shield:
@@ -493,7 +510,7 @@ class Player(discord.User):
                     raw_damage = self._mitigate_damage(raw_damage)
                 damage = raw_damage
 
-            case _:
+            case EDamage.Wound:
                 damage = raw_damage * ((100/(100+(self.Armor/2))) + (100/(100+(self.Perception/2))))
 
         if damage <= 0:

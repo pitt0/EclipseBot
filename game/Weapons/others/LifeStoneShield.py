@@ -8,7 +8,7 @@ from ...Resources import *
 if TYPE_CHECKING:
     from ...Lobby import Player
 
-__all__ = ('LifeStoneShield')
+__all__ = ('LifeStoneShield',)
 
 class LifeStoneShield(Weapon):
 

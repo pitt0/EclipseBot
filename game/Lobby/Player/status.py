@@ -1,7 +1,7 @@
 from ...Resources import EStatus, ECondition
 
 __all__ = (
-    'Status'
+    'Status',
     )
 
 class Status:

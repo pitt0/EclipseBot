@@ -1,7 +1,8 @@
 from typing import TYPE_CHECKING
+
 from .resources import _OTD
 
-from ...Resources import EWound, EStatus, ECondition
+from game.Resources import EWound, EStatus, ECondition, EDamage
 
 if TYPE_CHECKING:
     from .player import Player
@@ -14,9 +15,11 @@ class OverTimeDamage:
         'player'
     )
 
+    if TYPE_CHECKING:
+        player: Player
+
     def __init__(self):
         self._damages: list[_OTD] = []
-        self.player: 'Player' = None
 
     def set_player(self, player: 'Player'):
         self.player = player
@@ -32,7 +35,7 @@ class OverTimeDamage:
     def _end_turn(self):
         dTot = 0
         for _otd in self._damages:
-            damage = self.player.TakeDamage(_otd.damage, _otd.type)
+            damage = self.player.TakeDamage(_otd.damage, EDamage.Wound)
             dTot += damage
             _otd.turns -= 1
             if _otd.turns == 0:

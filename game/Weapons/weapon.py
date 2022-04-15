@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 import random
 
-from ..Resources import EDamage
+from ..Resources import EDamage, Ability, CostType
 
 if TYPE_CHECKING:
     from ..Lobby import Player
@@ -29,10 +29,11 @@ class Weapon:
         "Armor",
         "Intelligence",
         "Speed",
-        "BA",
         "Abilities",
         "Type",
-        'payload'
+        'payload',
+
+        '_base_attack'
     )
 
     def __init__(self, character: 'Player', shield: int, wImage: str, hImage: str, **stats):
@@ -49,7 +50,18 @@ class Weapon:
         self.Intelligence = stats.get("Intelligence", 1)
         self.Speed = stats.get("Speed", 1)
 
-        self.BA = f"Deals {self.User.Strength} damage _(100% of your `Strength`)_"
+        self._base_attack = Ability(
+            'Base Attack',
+            f"Deals {self.User.Strength} damage _(100% of your `Strength`)_",
+            f"Deals {self.User.Strength} damage _(100% of your `Strength`)_",
+            0, CostType.Null,
+            self.BaseAttack,
+            1
+        )
+
+        self.Abilities = (
+            self._base_attack,
+        )
         self.payload = {
             'damage': 0,
             'critcal': False,
@@ -75,10 +87,9 @@ class Weapon:
         self._name = "".join(letter for letter in name)
 
     def BaseAttack(self, target: 'Player') -> str:
-
         crit = random.randint(0, 100)
         critical = crit <= self.User.CritChance
-        damage: int = self.User.Strength
+        damage: float = self.User.Strength
         damage *= self.User.CritDamage if critical else 1
         dmg_output = target.TakeDamage(damage, EDamage.BaseAttack)
 

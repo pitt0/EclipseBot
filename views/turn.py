@@ -1,87 +1,94 @@
-from typing import Any
-
 import discord
 
-from game import Player
-import resources as res
 from .field import *
+from game import Player
+
+import resources as res
+import game
 
 __all__ = (
-    'Ability', 
-    'Move',
+    'AbilityButton', 
+    'MoveChoice',
     'Attack'
 )
 
 
-class Ability(discord.ui.Button["Abilities"]):
+class AbilityButton(discord.ui.Button['VAbilities']):
     """Represents an ability Button
+
     Parameters
     ---
     ability :class:`str`
         The ability name
-    stamina :class:`bool`
-        Whether the ability is clickable or not, bool will be used on button.disabled
+    disabled :class:`bool`
+        Whether the ability is clickable or not
     """
-    def __init__(self, ability: str, stamina: bool):
-        super().__init__(label=ability, row=0, disabled=stamina)
+    def __init__(self, ability: game.Ability, disabled: bool):
+        super().__init__(label=str(ability), row=0, disabled=disabled)
+        self.ability = ability
 
     async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
+        assert self.label is not None
 
-        ability: dict[str, Any] = self.view.player.Abilities[self.label]
+        players = self.view.players
         
-        attack = Attack(self.view, self.label, self.view.player, self.view.players, res.EAttackType.Ability)
+        attack = Attack(self.view, self.ability, self.view.player, players)
         await interaction.response.edit_message(embed=attack.embed, view=attack)
         await attack.wait()
 
-        if not attack.attack: # If player pressed 'Back'
+        if attack.result is res.EResult.Back:
             return
 
-        allies = [player for player in self.view.players if player.team == self.view.player.team and player != self.view.player and player.Alive]
-        match ability.get('Targets', 1):
+        allies = [player for player in players if player.team == player.team and player != self.view.player and player.Alive]
+        match self.ability.targets:
             case -2:
                 targets = [enemy for enemy in self.view.enemies if enemy.cHealth < enemy.Health]
-                self.view.result = ability['Callable'](targets, allies)
+                self.view.result = self.ability.cast(targets, allies)
             case -1:
-                self.view.result = ability['Callable'](self.view.enemies, allies)
+                self.view.result = self.ability.cast(self.view.enemies, allies)
             case 0:
-                self.view.result = ability['Callable'](None, allies)
+                self.view.result = self.ability.cast(None, allies)
             case _:
                 targets: list[Player] = []
-                while len(targets) < ability.get('Targets', 1):
-                    field = FightField(self.view.player, self.view.players, targets)
-                    await interaction.message.edit(embed=field.embed, view=field)
+                while len(targets) < self.ability.targets:
+                    field = FightField(self.view.player, self.view.players, targets, self.view.previous.prob, self.view.previous.buff)
+                    await interaction.message.edit(embed=field.embed, view=field) # type: ignore
                     await field.wait()
-                    match field.target:
-                        case res.ETarget.Back:
+                    match field.result:
+                        case res.EResult.Back:
                             try:
                                 targets.pop(-1)
                                 continue
+                            
                             except IndexError:
-                                await interaction.message.edit(embed=self.view.previous.embed, view=self.view.previous)
-                                self.view.stop()
-                                return
-                        case res.ETarget.Done:
+                                previous = self.view.previous
+                                await interaction.message.edit(embed=previous.embed, view=previous) # type: ignore
+                                return self.view.stop()
+
+                        case res.EResult.Done:
                             if len(targets) == 0:
                                 continue
                             break
                         case _:
+                            assert field.target is not None
                             targets.append(field.target)
                 
-                if ability.get('Targets', 1) == 1:
-                    self.view.result = ability['Callable'](targets[0], allies)
+                if self.ability.targets == 1:
+                    self.view.result = self.ability.cast(targets[0], allies)
                 else:
-                    self.view.result = ability['Callable'](targets, allies)
+                    self.view.result = self.ability.cast(targets, allies)
 
         await self.view.wait_for_players()
         self.view.stop()
 
 
-class Abilities(discord.ui.View):
+class VAbilities(discord.ui.View):
     """A wrapper for player's abilities"""
 
     def __init__(
         self,
-        previous_view: 'Move',
+        previous_view: 'MoveChoice',
         player: Player,
         allies: list[Player],
         enemies: list[Player],
@@ -98,55 +105,61 @@ class Abilities(discord.ui.View):
         abilities = player.Abilities
         disabled = False
         for ability in abilities:
-            match player.Weapon.Name:
-                case 'Sharpened Katana':
-                    print(player.Weapon.UsedAbilities)
-                    if ability in player.Weapon.UsedAbilities:
-                        disabled = True
-                    self.embed.set_footer(text='A disabled button means that you have no enouhg stamina or you already used this ability.\nYou must use all the ability once before you can use one twice.')
-                case "Shadows's Dagger":
-                    disabled = self.player.cHealth <= round(abilities[ability]['Health'])
-                case 'Reaper Bow':
-                    disabled = False
-                case _:
-                    disabled = self.player.cStamina < abilities[ability].get('Stamina', 0)
-            self.add_item(Ability(ability, disabled))
+            
+            disabled = False
+            match ability.cost_type:
+                case game.CostType.Stamina:
+                    disabled = self.player.cStamina < ability.cost
+                case game.CostType.Health:
+                    disabled = self.player.cHealth < ability.cost
+
+            if isinstance(player.Weapon, game.SharpenedKatana):
+                print(player.Weapon.UsedAbilities)
+                if ability in player.Weapon.UsedAbilities:
+                    disabled = True
+                self.embed.set_footer(text='A disabled button means that you have no enouhg stamina or you already used this ability.\nYou must use all the ability once before you can use one twice.')
+
+            self.add_item(AbilityButton(ability, disabled))
 
         self.allies = allies
         self.enemies = enemies
         self.players = players
 
-        self.result: str = None
+        self.result: str = None # type: ignore
+
+    @property
+    def children(self) -> list[discord.ui.Button]:
+        return [child for child in super().children if isinstance(child, discord.ui.Button)]
+
 
     @discord.ui.button(label='<<')
-    async def back_btn(self, button: discord.Button, interaction: discord.Interaction):
+    async def back_btn(self, interaction: discord.Interaction, _):
         await interaction.response.edit_message(embed=self.previous.embed, view=self.previous)
         self.stop()
 
     async def enable_buttons(self, disable: bool = False):
-        children: list[discord.Button] = self.children
-        for child in children:
+        for child in self.children:
             child.disabled = disable
 
     async def wait_for_players(self):
         await self.wait_players()
         for player in self.players:
-            await player.wait_ready()
-        await self.stop_waiting()
+            await player.wait()
+        await self._done()
 
     async def wait_players(self):
         await self.enable_buttons(disable=True)
         for player in self.players:
             self.user_messages.append(await player.send('Waiting for other players...'))
 
-    async def stop_waiting(self):        
+    async def _done(self):        
         await self.enable_buttons(disable=False)
         for message in self.user_messages:
             await message.delete()
         self.user_messages = []
 
 
-class Move(discord.ui.View):
+class MoveChoice(discord.ui.View):
     """The prompt from where the current player will choose what to do.
     
     Parameters
@@ -164,7 +177,7 @@ class Move(discord.ui.View):
         The result of player's action.
     """
 
-    def __init__(self, player: Player, players: list[Player], prob: int, buff: res.Buff):
+    def __init__(self, player: Player, players: list[Player], prob: int, buff: game.Buff):
         super().__init__(timeout=None)
         self.player = player
         self.allies = [pl for pl in players if pl.team == player.team and player != pl]
@@ -177,61 +190,70 @@ class Move(discord.ui.View):
         self.user_messages: list[discord.Message] = []
 
         self.embed = discord.Embed(title='Your Turn', description='Make your choice', color=player.color)
-        self.embed.add_field(name='Base Attack', value=player.Weapon.BA, inline=False)
+        self.embed.add_field(name='Base Attack', value=player.Weapon.Abilities[0], inline=False)
         for ability in player.Abilities:
-            self.embed.add_field(name=ability, value=player.Abilities[ability]['Brief'], inline=False)
+            self.embed.add_field(name=ability, value=ability.brief, inline=False)
 
-        self.result: str = None
+        self.result: str = None # type: ignore
 
-    async def enable_buttons(self, disable: bool = False):
-        children: list[discord.Button] = self.children
-        for child in children:
-            child.disabled = disable
+    @property
+    def children(self) -> list[discord.ui.Button]:
+        return [child for child in super().children if isinstance(child, discord.ui.Button)]
 
-    async def wait_for_players(self):
-        await self.wait_players()
+    def enable_buttons(self):
+        for child in self.children:
+            child.disabled = False
+
+    def disable_buttons(self):
+        for child in self.children:
+            child.disabled = True
+
+    async def wait(self):
+        await super().wait()
+        await self.alert_players()
         for player in self.lobby:
-            await player.wait_ready()
-        await self.stop_waiting()
+            await player.wait()
+        await self._done()
 
-    async def wait_players(self):
-        await self.enable_buttons(disable=True)
+    async def alert_players(self):
+        self.disable_buttons()
         for player in self.lobby:
             self.user_messages.append(await player.send('Waiting for other players...'))
 
-    async def stop_waiting(self):        
-        await self.enable_buttons(disable=False)
+    async def _done(self):
+        self.enable_buttons()
         for message in self.user_messages:
             await message.delete()
         self.user_messages = []
 
     @discord.ui.button(label="Base Attack")
-    async def BaseAttack(self, button: discord.Button, interaction: discord.Interaction):
+    async def BaseAttack(self, interaction: discord.Interaction, _):
     
         await interaction.response.defer()
-        await self.wait_for_players()
+        await self.wait()
+        ability = self.player.Abilities[0]
 
-        attack = Attack(self, 'Base Attack', self.player, self.lobby, res.EAttackType.BaseAttack)
-        await interaction.followup.edit_message(interaction.message.id, embed=attack.embed, view=attack)
+        attack = Attack(self, ability, self.player, self.lobby)
+        await interaction.followup.edit_message(interaction.message.id, embed=attack.embed, view=attack) # type: ignore
         await attack.wait()
-        await self.wait_for_players()
+        await self.wait()
 
-        if not attack.attack: # If user pressed 'Back'
+        if attack.result is res.EResult.Back:
             return
 
         
         field = FightField(self.player, self.lobby, [], self.prob, self.buff)
-        await interaction.followup.edit_message(interaction.message.id, embed=field.embed, view=field)
+        await interaction.followup.edit_message(interaction.message.id, embed=field.embed, view=field) # type: ignore
         await field.wait()
-        await self.wait_for_players()
-
+        await self.wait()
+        assert field.target is not None
         self.result = self.player.BaseAttack(field.target)
         
         self.stop()
         
     @discord.ui.button(label="Ability")
-    async def Ability(self, button: discord.Button, interaction: discord.Interaction):
-        abilities = Abilities(self, self.player, self.allies, self.enemies, self.lobby)
+    async def Ability(self, interaction: discord.Interaction, _):
+        abilities = VAbilities(self, self.player, self.allies, self.enemies, self.lobby)
         await interaction.response.edit_message(embed=abilities.embed, view=abilities)
         await abilities.wait()
         if abilities.result is None:
@@ -241,28 +263,29 @@ class Move(discord.ui.View):
         self.stop()
 
     @discord.ui.button(label='Move')
-    async def Move(self, button: discord.Button, interaction: discord.Interaction):
+    async def Move(self, interaction: discord.Interaction, _):
 
         await interaction.response.defer()
-        await self.wait_for_players()
+        await self.wait()
         
         field = MovingField(self.player, self.lobby, self.prob, self.buff)
-        await interaction.followup.edit_message(embed=field.embed, view=field)
+        await interaction.followup.edit_message(interaction.message.id, embed=field.embed, view=field) # type: ignore
         await field.wait()
-        if field.result == res.ETarget.Back:
+        if field.result is res.EResult.Back:
             return 
 
-        await self.wait_for_players()
-        self.result = f"{self.player.name} moved to position: {', '.join(self.player.Position)}"
+        await self.wait()
+        self.result = f"{self.player.name} moved to position: {self.player.Position}"
         self.stop()
         
 
     @discord.ui.button(label="Pass")
-    async def Pass(self, button: discord.Button, interaction: discord.Interaction):
+    async def Pass(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
-        await self.wait_for_players()
+        await self.wait()
         self.result = f'{self.player.name} has `Passed`'
         self.stop()
+
 
 class Attack(discord.ui.View):
     """Called when the player has chosen what type of attack they want to use.
@@ -282,65 +305,57 @@ class Attack(discord.ui.View):
     """
 
     def __init__(self,
-        view: Ability | Move,
-        move: str,
+        view: VAbilities | MoveChoice,
+        move: game.Ability,
         cPlayer: Player,
         players: list[Player],
-        attack_type: res.EAttackType
     ):
         
         super().__init__(timeout=None)
         self.previous = view
-        self.move = move
-        self.player = cPlayer
         self.lobby = players
 
-        self.attack: bool = False
-        self.user_messages: list[discord.Message] = []
-
-        match attack_type:
-            case res.EAttackType.BaseAttack:
-                desc = cPlayer.Weapon.BA
-            case res.EAttackType.Ability:
-                desc = cPlayer.Abilities[move]['Description']
+        self.result: res.EResult
         
         self.embed = discord.Embed(title=move, description=cPlayer.Weapon.Name, color=cPlayer.color)
         self.embed.set_image(url=cPlayer.Weapon.Image)
-        self.embed.add_field(name='Description', value=desc)
-    
-    async def enable_buttons(self, disable: bool = False):
-        children: list[discord.Button] = self.children
-        for child in children:
-            child.disabled = disable
+        self.embed.add_field(name='Description', value=move.long)
 
+        self.__messages: list[discord.Message] = []
+
+
+    @property
+    def children(self) -> list[discord.ui.Button]:
+        return [child for child in super().children if isinstance(child, discord.ui.Button)]
+    
     async def wait_for_players(self):
         await self.wait_players()
         for player in self.lobby:
-            await player.wait_ready()
+            await player.wait()
         await self.stop_waiting()
 
     async def wait_players(self):
         for player in self.lobby:
-            self.user_messages.append(await player.send('Waiting for other players...'))
+            self.__messages.append(await player.send('Waiting for other players...'))
 
     async def stop_waiting(self):
-        for message in self.user_messages:
+        for message in self.__messages:
             await message.delete()
-        self.user_messages = []
+        self.__messages = []
 
 
     @discord.ui.button(label="Attack")
-    async def Attack(self, button: discord.Button, interaction: discord.Interaction):
-        self.attack = True
+    async def Attack(self, interaction: discord.Interaction, _):
+        self.result = res.EResult.Done
         await interaction.response.defer()
         await self.wait_for_players()
-        await interaction.followup.edit_message(interaction.message.id, embed=self.previous.embed, view=self.previous)
+        await interaction.followup.edit_message(interaction.message.id, embed=self.previous.embed, view=self.previous) # type: ignore
         self.stop()
 
     @discord.ui.button(label="Back")
-    async def Back(self, button: discord.Button, interaction: discord.Interaction):
-        self.attack = False
+    async def Back(self, interaction: discord.Interaction, _):
+        self.result = res.EResult.Back
         await interaction.response.defer()
         await self.wait_for_players()
-        await interaction.followup.edit_message(interaction.message.id, embed=self.previous.embed, view=self.previous)
+        await interaction.followup.edit_message(interaction.message.id, embed=self.previous.embed, view=self.previous) # type: ignore
         self.stop()

@@ -1,10 +1,11 @@
 import discord
-import random
+# import random
 
 import resources as res
 from game import Player
+from views.abc.fields import V
+from .abc import FieldButton, Field
 import game
-from .info import Info
 
 
 __all__ = (
@@ -13,360 +14,222 @@ __all__ = (
     'MovingField'
 )
 
-
-class FightFieldButton(discord.ui.Button["FightField"]):
-    def __init__(
-        self, 
-        player: Player | None = None, 
-        label: str = '\u200b', 
-        row: int = 0, 
-        disabled: bool = False, 
-        style: discord.ButtonStyle = discord.ButtonStyle.grey
-    ):
-
-        self.player = player
-        super().__init__(label=label, disabled=disabled or (not player), row=row, style=style)
+class PlayerButton(FieldButton[V]): # I keep using 'V' to subclass this Button, this class needs to know nothing about its view anyway
+    def __init__(self, player: Player, label: str, style: discord.ButtonStyle, disabled: bool = False):
+        super().__init__(player, player.Position, label, style=style, force_disable=disabled)
+        self.player: Player = player
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user != self.player: # If user clicked 'You'
+        await self._show_info(interaction)
+
+
+class TargetPlayerButton(PlayerButton["FightField"]):
+    """Represents a player button. This player may be targeted by an another player's attack."""
+    def __init__(
+        self,
+        player: Player,
+        label: str,
+        style: discord.ButtonStyle,
+        disabled: bool = False
+    ):
+
+        super().__init__(player, label, style, disabled)
+
+    async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
+        if interaction.user != self.player:  # user did not click 'You'
             self.view.target = self.player
             self.view.stop()
             return
 
-        await self.view.enable_buttons(disabled=True)
-        self.player.activity = game.EActivity.WatchingInfo
-        info = Info(self.player)
-        await interaction.response.send_message(embed=info.embed, view=info)
-        await info.wait()
-        await self.view.enable_buttons(disabled=False)
+        # user clicked 'You'
+        await self._show_info(interaction)
 
-class FightField(discord.ui.View):
+
+class BuffButton(FieldButton[Field]):
+
+    def __init__(
+        self,
+        buff: game.Buff,
+        label: str,
+        disabled: bool = True
+    ):
+        self.buff = buff
+        super().__init__(buff, buff.Position, label, force_disable=disabled)
+
+    async def callback(self, interaction: discord.Interaction):
+        assert isinstance(self.view, MovingField) # This button should be enabled only in MovingField 
+        player: Player = self.view.player
+        assert player.Position is not None
+        player.Position.set_x(self.buff.Position.x) # type: ignore
+        player.Position.set_y(self.buff.Position.y) # type: ignore
+
+        match self.buff.Stat:
+            case game.BuffStat.Strength:
+                player.Strength += 25
+            case game.BuffStat.Armor:
+                player.Armor += 15
+            case game.BuffStat.Intelligence:
+                player.Intelligence += 25
+            case game.BuffStat.Perception:
+                player.Perception += 15
+            case game.BuffStat.Health:
+                player.cHealth += 50
+            case game.BuffStat.Stamina:
+                player.cStamina += 25
+        await interaction.response.edit_message(embed=self.view.embed, view=self.view)
+        self.view.stop() # type: ignore
+
+
+class EmptyButton(FieldButton[Field]):
+    def __init__(self, position: game.Position, disable: bool = True):
+        super().__init__(row=position.y, force_disable=disable)
+        self.position = position
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        self.target = self.position
+        self.view.stop() # type: ignore
+
+
+class FightField(Field):
     """Represents the field of the current player.
     """
-    def __init__(self,
+
+    def __init__(
+        self,
         player: Player,
         players: list[Player],
         targets: list[Player],
         prob: int,
-        buff: res.Buff
+        buff: game.Buff
     ):
 
-        super().__init__(timeout=None)
-        _placed: dict[tuple[int, int], Player] = {}
-    
-        self.target: Player = None
-        
+        super().__init__(player, players, prob, buff)
+        self.player = player
         self.embed = discord.Embed(
-            title='Field',
-            description='Choose your target',
-            color=player.color
+            title="It's your turn"
         )
-        for _player in players:
-            if not _player.Alive:
-                continue
-            if _player.Position is None:
-                pCoordinates = _player.Coordinates(_placed, 'as_enemy' if _player.team == player.team else 'as_player')
-                _player.Position = pCoordinates
+        if len(targets) == 0:
+            self.children[-1].disabled = True
+        else:
+            self.children[-1].disabled = False
 
-            _placed[_player.Position] = _player
-        
-        if prob <= 25 and len(_placed) < 10:
-            for i in range(4):
-                if (buff.x + i, buff.y) not in _placed:
-                    buff.x += i
-                    break
-                if (buff.x, buff.y + i) not in _placed:
-                    buff.y += i
-                    break
-                if (buff.x - i, buff.y) not in _placed:
-                    buff.x -= i
-                    break
-                if (buff.x, buff.y - i) not in _placed:
-                    buff.y -= i
-                    break
-
-        print(_placed)
-
+        self.result: res.EResult | None = None
+        self.target: Player | None = None
         for x in range(5):
+            self._position.set_x(x)
             for y in range(4):
-                
-                if not _placed.get((x, y)):
-                    if prob <= 25 and (x, y) == (buff.x, buff.y):
-                        match buff.buff:
-                            case res.EBuff.Health:
-                                label = 'Hp +50'
-                            case res.EBuff.Stamina:
-                                label = 'St +25'
-                            case res.EBuff.Strength | res.EBuff.Intelligence:
-                                label = f'{buff.buff.name[:2]} +25'
-                            case res.EBuff.Armor | res.EBuff.Perception:
-                                label = f'{buff.buff.name[:2]} +15'
-                        
-                        self.add_item(FightFieldButton(label=label, row=y, disabled=True))
-                        continue
+                self._position.set_y(y)
 
-                    self.add_item(FightFieldButton(row=y, disabled=True))
-                    continue
-                
-                p = _placed[(x, y)]
-                if p == player:
-                    label = 'You'
+                if self._position in self._placed:
+                    placeable = self._placed[self._position]
+
+                    if isinstance(placeable, Player):
+                        self.__place_player(placeable, targets)
+
+                    else: 
+                        assert isinstance(placeable, game.Buff)
+                        self.__place_buff(placeable)
 
                 else:
-                    label = p.name[0]
+                    self.add_item(EmptyButton(self._position, disable=True))
 
-                if p.cHealth >= p.Health * 0.75:
-                    style = discord.ButtonStyle.green
-                elif p.cHealth <= p.Health * 0.25:
-                    style = discord.ButtonStyle.red
-                else:
-                    style = discord.ButtonStyle.grey
+    def __place_player(self, placeable: Player, targets: list[Player]):
+        label = self._button_label(self.player, placeable)
+        disabled = placeable in targets
+        style = self._button_style(placeable)
 
-                self.add_item(FightFieldButton(p, label, row=y, disabled=p in targets, style=style))
+        if placeable == self.player:
+            self.add_item(PlayerButton(self.player, label, style, disabled))
+        else:
+            self.add_item(TargetPlayerButton(placeable, label, style, disabled))
 
-
-    async def enable_buttons(self, disabled=False):
-        children: list[FieldButton] = self.children
-        for child in children:
-            child.disabled = disabled
+    def __place_buff(self, buff: game.Buff):
+        label = self._button_buff_label(buff)
+        self.add_item(BuffButton(buff, label))
 
     @discord.ui.button(label='Back', row=4)
-    async def back_btn(self, button: discord.Button, interaction: discord.Interaction):
+    async def back_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
-        self.target = res.ETarget.Back
+        self.result = res.EResult.Back
         self.stop()
-    
+
     @discord.ui.button(label='Attack', row=4)
-    async def done_btn(self, button: discord.Button, interaction: discord.Interaction):
+    async def done_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
-        self.target = res.ETarget.Done
+        self.result = res.EResult.Done
         self.stop()
 
 
-class MovingFieldButton(discord.ui.Button['MovingField']):
+class MovingField(Field):
 
-    def __init__(self, 
-        label: str = '\u200b',
-        disabled: bool = False, 
-        row: int = 0, 
-        style: discord.ButtonStyle = discord.ButtonStyle.grey,
-        buff: res.Buff = None
-    ):
-        if buff:
-            style = discord.ButtonStyle.grey
-            match buff.buff:
-                case res.EBuff.Health:
-                    label = 'Hp +50'
-                case res.EBuff.Stamina:
-                    label = 'St +25'
-                case res.EBuff.Strength | res.EBuff.Intelligence:
-                    label = f'{buff.buff.name[:2]} +25'
-                case res.EBuff.Armor | res.EBuff.Perception:
-                    label = f'{buff.buff.name[:2]} +15'
-        else:
-            label = '\u200b'
-        self.buff = buff
-        super().__init__(label=label, disabled=disabled, row=row, style=style)
-
-    async def callback(self, interaction: discord.Interaction):
-        self.view.player.Position = (self.buff.x, self.buff.y)
-        match self.buff.buff:
-            case res.EBuff.Strength:
-                self.view.player.Strength += 25
-            case res.EBuff.Armor:
-                self.view.player.Armor += 15
-            case res.EBuff.Intelligence:
-                self.view.player.Intelligence += 25
-            case res.EBuff.Perception:
-                self.view.player.Perception += 15
-            case res.EBuff.Health:
-                self.view.player.cHealth += 50
-            case res.EBuff.Stamina:
-                self.view.player.cStamina += 25
-        await interaction.response.edit_message(embed=self.view.embed, view=self.view)
-        self.stop()
-
-class MovingField(discord.ui.View):
-
-    def __init__(self,
+    def __init__(
+        self,
         player: Player,
         players: list[Player],
         prob: int,
-        buff: res.Buff
+        buff: game.Buff
     ):
-
-        super().__init__(timeout=None)
-        _placed: dict[tuple[int, int], Player] = {}
         
         self.player = player
-        self.result = res.ETarget.Moved
+        self.result: res.EResult | None = None
+        self.target: game.Position | None = None
 
-        self.buff = buff
-        
+        super().__init__(player, players, prob, buff)
         self.embed = discord.Embed(
-            title='Field',
-            description='Move to postion',
-            color=player.color
+            title='Where do you want to move?',
+            description='Tap on a location to move there.',
+            color=discord.Colour.og_blurple()
         )
-        for _player in players:
-            if not _player.Alive:
-                continue
-            if _player.Position is None:
-                pCoordinates = _player.Coordinates(_placed, 'as_enemy' if _player.team == player.team else 'as_player')
-                _player.Position = pCoordinates
-
-            _placed[_player.Position] = _player
-
-        if prob <= 25 and len(_placed) < 10:
-            for i in range(4):
-                if (buff.x + i, buff.y) not in _placed:
-                    buff.x += i
-                    break
-                if (buff.x, buff.y + i) not in _placed:
-                    buff.y += i
-                    break
-                if (buff.x - i, buff.y) not in _placed:
-                    buff.x -= i
-                    break
-                if (buff.x, buff.y - i) not in _placed:
-                    buff.y -= i
-                    break
-
-        print(_placed)
-
+        
         for x in range(5):
+            self._position.set_x(x)
             for y in range(4):
-                
-                if not _placed.get((x, y)):
-                    if prob <= 25:
-                        if x == self.buff.x and y == self.buff.y:
-                            self.add_item(MovingFieldButton(x=x, row=y, buff=self.buff))
-                    self.add_item(MovingFieldButton(x=x, row=y))
-                    continue
-                
-                p = _placed[(x, y)]
-                if p == player:
-                    label = 'You'
-
-                elif p in players:
-                    label = p.name[0]
-                
+                self._position.set_y(y)
+                if self._position in self._placed:
+                    placeable = self._placed[self._position]
+                    if isinstance(placeable, game.Buff):
+                        self.add_item(BuffButton(placeable, self._button_buff_label(placeable), False))
+                    else:
+                        assert isinstance(placeable, Player)
+                        self.add_item(PlayerButton(placeable, self._button_label(placeable, player), style=self._button_style(placeable)))
                 else:
-                    label = '\u200b'
-
-                if p.cHealth >= p.Health * 0.75:
-                    style = discord.ButtonStyle.green
-                elif p.cHealth <= p.Health * 0.25:
-                    style = discord.ButtonStyle.red
-                else:
-                    style = discord.ButtonStyle.grey
-
-                self.add_item(MovingFieldButton(label, x, row=y, disabled=True, style=style))
+                    self.add_item(EmptyButton(self._position, disable=False))
 
     @discord.ui.button(label='Back', row=4)
-    async def back_btn(self, button: discord.Button, interaction: discord.Interaction):
+    async def back_btn(self, interaction: discord.Interaction, _):
         await interaction.response.defer()
-        self.target = res.ETarget.Back
+        self.result = res.EResult.Back
         self.stop()
 
 
-class FieldButton(discord.ui.Button['WaitingField']):
+class WaitingField(Field):
 
-    def __init__(self, player: Player| None = None, label: str = '\u200b', row: int = 0, style: discord.ButtonStyle = discord.ButtonStyle.grey):
-
-        self.player = player
-        super().__init__(label=label, disabled=(not player), row=row, style=style)
-
-    async def callback(self, interaction: discord.Interaction):
-        info = Info(self.player)
-        await self.view.enable_buttons(disabled=True)
-        self.player.activity = game.EActivity.WatchingInfo
-        await interaction.response.send_message(embed=info.embed, view=info)
-        await info.wait()
-        await self.view.enable_buttons()
-
-
-class WaitingField(discord.ui.View):
-
-    def __init__(self,
+    def __init__(
+        self,
         player: Player,
         players: list[Player],
         current_player: Player,
         prob: int,
-        buff: res.Buff
+        buff: game.Buff
     ):
 
-        super().__init__(timeout=None)
-        _placed: dict[tuple[int, int], Player] = {}
-    
+        super().__init__(player, players, prob, buff)
+        
         self.embed = discord.Embed(title='Field', description=f'Waiting for {current_player.mention}', color=player.color)
         self.embed.set_footer(text='If you click on any player you will see their info.')
 
-        for _player in players:
-            if not _player.Alive:
-                continue
-            if _player.Position is None:
-                pCoordinates = _player.Coordinates(_placed, 'as_enemy' if _player.team == player.team else 'as_player')
-                _player.Position = pCoordinates
-            _placed[_player.Position] = _player
-
-        if prob <= 25 and len(_placed) < 10:
-            for i in range(4):
-                if (buff.x + i, buff.y) not in _placed:
-                    buff.x += i
-                    break
-                if (buff.x, buff.y + i) not in _placed:
-                    buff.y += i
-                    break
-                if (buff.x - i, buff.y) not in _placed:
-                    buff.x -= i
-                    break
-                if (buff.x, buff.y - i) not in _placed:
-                    buff.y -= i
-                    break
-
-        print(_placed)
-            
         for x in range(5):
+            self._position.set_x(x)
             for y in range(4):
-                
-                if not _placed.get((x, y)):
-                    if prob <= 25 and (x, y) == (buff.x, buff.y):
-                        match buff.buff:
-                            case res.EBuff.Health:
-                                label = 'Hp +50'
-                            case res.EBuff.Stamina:
-                                label = 'St +25'
-                            case res.EBuff.Strength | res.EBuff.Intelligence:
-                                label = f'{buff.buff.name[:2]} +25'
-                            case res.EBuff.Armor | res.EBuff.Perception:
-                                label = f'{buff.buff.name[:2]} +15'
-                        
-                        self.add_item(FightFieldButton(label=label, row=y, disabled=True))
-                        continue
-                    self.add_item(FieldButton(row=y))
-                    continue
-                
-                p = _placed[(x, y)]
-                if p == player:
-                    label = 'You'
-
-                elif p in players:
-                    label = p.name[0]
-
+                self._position.set_y(y)
+                if self._position in self._placed:
+                    placeable = self._placed[self._position]
+                    if isinstance(placeable, game.Buff):
+                        self.add_item(BuffButton(placeable, self._button_buff_label(placeable)))
+                    else:
+                        assert isinstance(placeable, Player)
+                        self.add_item(PlayerButton(placeable, self._button_label(placeable, player), style=self._button_style(placeable)))
                 else:
-                    label = '\u200b'
-                    
-                if p.cHealth >= p.Health * 0.75:
-                    style = discord.ButtonStyle.green
-                elif p.cHealth <= p.Health * 0.25:
-                    style = discord.ButtonStyle.red
-                else:
-                    style = discord.ButtonStyle.grey
-
-                self.add_item(FieldButton(p, label, row=y, style=style))
-
-    async def enable_buttons(self, disabled=False):
-        children: list[FieldButton] = self.children
-        for child in children:
-            child.disabled = disabled
+                    self.add_item(EmptyButton(self._position))

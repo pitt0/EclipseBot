@@ -14,11 +14,11 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
+    await bot.load_extension('cog')
     now = datetime.datetime.now(tz=pytz.timezone('Europe/Rome'))
     print(f"[{now.strftime('%H:%M:%S')}] Bot started.")
 
 
 if __name__ == '__main__':
     load_dotenv('./secrets/.env')
-    bot.load_extension('cog')
     bot.run(os.getenv('TOKEN'))

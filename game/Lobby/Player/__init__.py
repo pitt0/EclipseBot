@@ -1,3 +1,5 @@
+from .base import HasPosition
+from .buff import Buff, BuffStat
 from .player import Player
 
 from .resources import *

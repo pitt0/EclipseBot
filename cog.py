@@ -1,4 +1,3 @@
-from configparser import NoOptionError
 from discord.ext import commands
 from dataclasses import dataclass
 
@@ -35,14 +34,15 @@ class Game(commands.Cog):
 
         self.bot = bot
         self.inGame: bool = False
+        self.GameInstances: dict[int, Game] = {}
         
         self.players: list[Player] = []
         self.turn = Turn()
 
-        self.creator: discord.Member = NoOptionError
+        self.creator: discord.User | discord.Member | None = None
         self.messages: list[discord.Message] = []
 
-        self.channel: discord.TextChannel = None
+        self.channel: discord.TextChannel | None = None
 
 
     @commands.Cog.listener()
@@ -86,7 +86,7 @@ class Game(commands.Cog):
             
             shop = Shop(player)
             shops.append(shop)
-            if shop.content is not None:
+            if shop.content is not None or shop.embed is None:
                 await player.send(shop.content)
             else:
                 await player.send(embed=shop.embed, view=shop)
@@ -139,8 +139,8 @@ class Game(commands.Cog):
 
         return embed
 
-    async def CurrentPlayerTurn(self, player: Player) -> Move:
-        move = Move(player, self.players, self.turn.prob, self.turn.buff)
+    async def CurrentPlayerTurn(self, player: Player) -> MoveChoice:
+        move = MoveChoice(player, self.players, self.turn.prob, self.turn.buff)
         self.messages.append(await player.send(embed=move.embed, view=move))
         return move
     
