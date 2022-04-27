@@ -16,10 +16,6 @@ class Game(commands.Cog):
         super().__init__()
         self.bot = bot
 
-    async def destroy_game(self, reason: str) -> None:
-        print(reason)
-        self.in_game = False
-
     @commands.command(name='game')
     async def start_game(self, ctx: commands.Context):
         if ctx.guild is None:
@@ -33,7 +29,7 @@ class Game(commands.Cog):
         try:
             await self.game_instances[ctx.guild.id].start()
         except Exception as e:
-            print("Game has ended")
+            del self.game_instances[ctx.guild.id]
             print(e)
             return
         

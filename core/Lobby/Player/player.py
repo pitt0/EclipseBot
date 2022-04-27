@@ -29,7 +29,7 @@ __all__ = (
     'Player',
 )
 
-path = 'game/stats.json'
+path = 'core/stats.json'
 with open(path) as f: statistics = json.load(f)
 
 class Player(discord.User):
