@@ -4,19 +4,21 @@ from dataclasses import dataclass
 import discord
 import random
 
-from game import Player
+from core import Player
+from gameclass import PvPGame
 from views import *
-from resources import EBuff, Buff
+import core
 import game
+
 
 
 @dataclass
 class Turn:
     prob: int = 0
-    buff: Buff = None
+    buff: core.Buff = None # type: ignore
     _turn: int = 0
 
-    def Pass(self, prob: int, buff: Buff):
+    def Pass(self, prob: int, buff: core.Buff):
         self.prob = prob
         self.buff = buff
         self._turn += 1
@@ -25,36 +27,41 @@ class Turn:
         return str(self._turn)
 
 
-class GameEnded(BaseException):
-    """Raised whenever the game ends"""
-
 class Game(commands.Cog):
+    # TODO: remove the cog, may switch to slash commands
 
+    game_instances: dict[int, game.Game] = {}
+ 
     def __init__(self, bot: commands.Bot):
 
+        super().__init__()
         self.bot = bot
-        self.inGame: bool = False
-        self.GameInstances: dict[int, Game] = {}
-        
-        self.players: list[Player] = []
-        self.turn = Turn()
-
-        self.creator: discord.User | discord.Member | None = None
-        self.messages: list[discord.Message] = []
-
-        self.channel: discord.TextChannel | None = None
 
 
     @commands.Cog.listener()
-    async def on_command_error(self, ctx: commands.Context, error: Exception):
+    async def on_error(self, *args, **kwargs):
+        self.in_game = False
+        print()
+        print()
+        print()
+        print()
+        print()
+        print()
+        print()
+        print(args)
+        print(kwargs)
+        print()
+        print()
+        print()
+        print()
+        print()
+        print()
 
-        self.inGame = False
-        raise error
 
     async def lobby(self):
         
-        lobby = Lobby(self.creator, self.bot)
-        t = await self.channel.send(embed=lobby.embed, view=lobby)
+        lobby = Lobby(self.creator) # type: ignore
+        t = await self.channel.send(embed=lobby.embed, view=lobby) # type: ignore
         lobby.response = t
 
         await lobby.wait()
@@ -65,11 +72,10 @@ class Game(commands.Cog):
     async def teams(self):
 
         for player in self.players:
-            player.activity = game.EActivity.ChoosingTeam
+            player.activity = core.EActivity.ChoosingTeam
 
         teams = Teams(self.players)
-        t = await self.channel.send(embed=teams.embed, view=teams)
-        teams.response = t
+        t = await self.channel.send(embed=teams.embed, view=teams) # type: ignore
 
         await teams.wait()
 
@@ -81,33 +87,12 @@ class Game(commands.Cog):
         shops: list[Shop] = []
         
         for player in self.players:
-            player.activity = game.EActivity.ChoosingWeapon
+            player.activity = core.EActivity.ChoosingWeapon
             await player.send(embed=self.team_embed)
             
             shop = Shop(player)
             shops.append(shop)
-            if shop.content is not None or shop.embed is None:
-                await player.send(shop.content)
-            else:
-                await player.send(embed=shop.embed, view=shop)
-            
-            if player.bot:
-                
-                def check(ans: discord.Message):
-                    return ans.author == player
-
-                role = await self.bot.wait_for('message', check=check)
-                match player.team:
-                    case game.ETeam.Shadow:
-                        for opt in SHADOW_ITEMS:
-                            if opt.label == role:
-                                break
-                        shadow_item(opt.value, player._user, shop)
-                    case game.ETeam.Noble:
-                        for opt in NOBLE_ITEMS:
-                            if opt.label == role:
-                                break
-                        noble_item(opt.value, player._user, shop)
+            shop.message = await player.send(embed=shop.embed, view=shop)
 
         for shop in shops:
             await shop.wait()
@@ -124,8 +109,8 @@ class Game(commands.Cog):
     @property
     def team_embed(self) -> discord.Embed:
 
-        shadows = [player for player in self.players if player.team is game.ETeam.Shadow]
-        nobles = [player for player in self.players if player.team is game.ETeam.Noble]
+        shadows = [player for player in self.players if player.team is core.ETeam.Shadow]
+        nobles = [player for player in self.players if player.team is core.ETeam.Noble]
 
         embed = discord.Embed(title='Teams', color=discord.Colour.purple())
         embed.add_field(name='Shadows', value='\n'.join(player.mention for player in shadows))
@@ -139,33 +124,33 @@ class Game(commands.Cog):
 
         return embed
 
-    async def CurrentPlayerTurn(self, player: Player) -> MoveChoice:
-        move = MoveChoice(player, self.players, self.turn.prob, self.turn.buff)
+    async def CurrentPlayerTurn(self, turn: Turn, player: Player) -> MoveChoice:
+        move = MoveChoice(player, self.players, turn.prob, turn.buff)
         self.messages.append(await player.send(embed=move.embed, view=move))
         return move
     
-    async def PlayerWaiting(self, player: Player, cPlayer: Player):
-        view = WaitingField(player, self.players, cPlayer, self.turn.prob, self.turn.buff)
+    async def PlayerWaiting(self, turn: Turn, player: Player, cPlayer: Player):
+        view = WaitingField(player, self.players, cPlayer, turn.prob, turn.buff)
         self.messages.append(await player.send(embed=view.embed, view=view))
 
-    async def GeneralTurn(self, cPlayer: Player):
-        move = await self.CurrentPlayerTurn(cPlayer)
+    async def GeneralTurn(self, turn: Turn, cPlayer: Player):
+        move = await self.CurrentPlayerTurn(turn, cPlayer)
 
         for player in self.players:
             if player == cPlayer:
                 continue
-            await self.PlayerWaiting(player, cPlayer)
+            await self.PlayerWaiting(turn, player, cPlayer)
 
         await move.wait()
         return move
 
-    async def TurnRecap(self, result: str):
+    async def TurnRecap(self, turn: Turn, result: str):
 
-        shadows = [shadow for shadow in self.players if shadow.team is game.ETeam.Shadow]
-        nobles = [noble for noble in self.players if noble.team is game.ETeam.Noble]
+        shadows = [shadow for shadow in self.players if shadow.team is core.ETeam.Shadow]
+        nobles = [noble for noble in self.players if noble.team is core.ETeam.Noble]
 
         embed = discord.Embed(
-            title=f'Turn {self.turn} • Attack Result',
+            title=f'Turn {turn} • Attack Result',
             description=result,
             color=discord.Color.blue()
         )
@@ -182,114 +167,38 @@ class Game(commands.Cog):
         return embed
 
     def CheckTeams(self):
-        nobles = [noble for noble in self.players if noble.team is game.ETeam.Noble]
-        shadows = [shadow for shadow in self.players if shadow.team is game.ETeam.Shadow]
+        nobles = [noble for noble in self.players if noble.team is core.ETeam.Noble]
+        shadows = [shadow for shadow in self.players if shadow.team is core.ETeam.Shadow]
         return all(not player.Alive for player in shadows) or all(not player.Alive for player in nobles)
 
     async def EndGame(self):
-        winners = 'Shadows' if any(shadow.Alive for shadow in self.players if shadow.team is game.ETeam.Shadow) else 'Nobles'
+        winners = 'Shadows' if any(shadow.Alive for shadow in self.players if shadow.team is core.ETeam.Shadow) else 'Nobles'
         for player in self.players:
             await player.send(f"Game ended\n{winners} win.")
-        raise GameEnded(f'{winners} win')
+        await self.destroy_game(f'{winners} win')
+
+    async def destroy_game(self, reason: str) -> None:
+        print(reason)
+        self.in_game = False
 
     @commands.command(name='game')
     async def start_game(self, ctx: commands.Context):
-        await ctx.message.delete()
-        self.creator = ctx.author
+        if ctx.guild is None:
+            return
         
-        self.channel = await self.bot.fetch_channel(933784356697288776)
-        if ctx.channel.id != 933784356697288776:
-            await ctx.send(f'Game created in {self.channel.mention}')
-
-        if self.inGame:
-            await ctx.send('A game instance is already running')
+        if ctx.guild.id in self.game_instances:
+            await ctx.send('A game is already running')
             return
 
-        self.inGame = True
-
-        # Lobby
-        players = await self.lobby()
-        if len(players) in (0, 1) or all(usr.bot for usr in players):
-            raise GameEnded('Game has ended at lobby')
-
-        self.players = [Player(user) for user in players]
-        for player in self.players:
-            if player.bot:
-                await player.SetChannel(933784403098873906)
-        
-        # Team Choice
-        players = await self.teams()
-        if any(player.team is None for player in self.players):
-            raise GameEnded('Game has ended at team selection.')
-
-        self.players = players
-
-        # Weapon Choice
-        await self.shop()
-
-        
-        # Fight
-        while (
-            any(player.Alive for player in self.players if player.team is game.ETeam.Shadow) 
-            and 
-            any(player.Alive for player in self.players if player.team is game.ETeam.Noble)
-        ):
-            
-            self.players.sort(key=lambda p: p.Speed)
-
-            # A turn passes when all the players have done their move
-            prob = random.randint(0, 100)
-            buff = Buff(
-                random.randint(0, 4),
-                random.randint(0, 3),
-                random.choice(EBuff.mro())
-            )
-            self.turn.Pass(prob, buff)            
-
-            # Start of Turn
-            for cPlayer in self.players:
-
-                if not cPlayer.Alive:
-                    continue
-
-                if cPlayer.bot:
-                    embed = await self.TurnRecap(f'{cPlayer.name} has passed')
-                    for player in self.players:
-                        await player.send(embed=embed)
+        self.game_instances[ctx.guild.id] = PvPGame(ctx)
+        await self.game_instances[ctx.guild.id].start()
                 
-                else:
-
-                    move = await self.GeneralTurn(cPlayer)
-                    cPlayer.AfterAttack()
-
-                    for message in self.messages:
-                        await message.delete()
-
-                    embed = await self.TurnRecap(move.result)
-                    for player in self.players:
-                        await player.send(embed=embed)
-
-
-                    if self.CheckTeams():
-                        await self.EndGame()
-
-            # End Turn
-            for player in self.players:
-                log = player.EndTurn()
-                if log:
-                    for player in self.players:
-                        await player.send(log)
-
-                
-                if self.CheckTeams():
-                    await self.EndGame()
         
-        await self.EndGame()
 
     @commands.command(name='restart')
     async def restart(self, ctx: commands.Context):
-        raise GameEnded('Restarted')
+        await self.destroy_game('Restarted')
 
 
-def setup(bot: commands.Bot):
-    bot.add_cog(Game(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Game(bot))

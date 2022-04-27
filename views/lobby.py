@@ -35,7 +35,7 @@ class Lobby(discord.ui.View):
 
     @property
     def children(self) -> list[discord.ui.Button]:
-        return [child for child in self.children if hasattr(child, 'disabled')]
+        return super().children # type: ignore
     
     async def update_embed(self) -> None:
         self.embed = await edit_embed(
@@ -103,10 +103,4 @@ class Lobby(discord.ui.View):
         self.stop()
 
     async def on_timeout(self) -> None:
-        children: list[discord.ui.Button] = self.children
-        for child in children:
-            child.disabled = True
-        self.players = []
-        if self.response is not None:
-            await self.response.edit(view=self)
         self.stop()

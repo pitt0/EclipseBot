@@ -1,9 +1,9 @@
 from discord import SelectOption
 import discord
 
-from game import Player, Ability
+from core import Player, Ability
 import resources as res
-import game
+import core
 
 __all__ = ('Info',)
 
@@ -99,6 +99,6 @@ class Info(discord.ui.View):
             case 'Exit':
                 await interaction.response.edit_message(content='Exiting...')
                 await interaction.message.delete() # type: ignore
-                self.player.activity = game.EActivity.Idle
+                self.player.activity = core.EActivity.Idle
                 self.stop()
             

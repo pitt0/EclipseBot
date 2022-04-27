@@ -1,7 +1,7 @@
 import discord
 
 from resources import *
-from game import Player, ETeam, AlreadyInTeam
+from core import Player, ETeam, AlreadyInTeam
 
 
 class Teams(discord.ui.View):
@@ -24,7 +24,7 @@ class Teams(discord.ui.View):
 
     @property
     def children(self) -> list[discord.ui.Button]:
-        return [child for child in self.children if hasattr(child, 'disabled')]
+        return [child for child in super().children if hasattr(child, 'disabled')] # type: ignore
 
     async def update_embed(self):
         shadows = [player for player in self.players if player.team is ETeam.Shadow]
@@ -66,33 +66,13 @@ class Teams(discord.ui.View):
     #             player.team = ETeam.Noble
     #             nobles.append(player)
 
-    async def check_ready(self) -> bool:
-        return all(player.team is not None for player in self.players)
-        # non_bots = [player for player in self.players if not player.bot]
-        # ready_btn = self.children[2]
-        
-        # if any(player.team is None for player in self.players):
-            
-        #     if all(player.team is not None for player in non_bots):
-        #         # self.adapt_bots()
-        #         ready_btn.disabled = False
-        #         return True
-
-        #     ready_btn.disabled = True
-        #     return False
-        
-        # if all(player.team is ETeam.Shadow for player in self.players) or all(player.team is ETeam.Noble for player in self.players):
-            
-        #     if non_bots != []:
-        #         # self.adapt_bots()
-        #         ready_btn.disabled = False
-        #         return True
-
-        #     ready_btn.disabled = True
-        #     return False
-
-        # ready_btn.disabled = False
-        # return True
+    async def check_ready(self):
+        if any(player.team is None for player in self.players):
+            self.children[-1].disabled = True
+        elif all(player.team is ETeam.Shadow for player in self.players) or all(player.team is ETeam.Noble for player in self.players):
+            self.children[-1].disabled = True
+        else:
+            self.children[-1].disabled = False
 
     @discord.ui.button(label='Shadows')
     async def Shadows(self, interaction: discord.Interaction, _):

@@ -6,11 +6,13 @@ import os
 import datetime
 import pytz
 
+
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or("!"),
     help_command=None,
     intents=discord.Intents.all()
 )
+
 
 @bot.event
 async def on_ready():

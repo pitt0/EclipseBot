@@ -2,10 +2,10 @@ import discord
 # import random
 
 import resources as res
-from game import Player
+from core import Player
 from views.abc.fields import V
 from .abc import FieldButton, Field
-import game
+import core
 
 
 __all__ = (
@@ -50,7 +50,7 @@ class BuffButton(FieldButton[Field]):
 
     def __init__(
         self,
-        buff: game.Buff,
+        buff: core.Buff,
         label: str,
         disabled: bool = True
     ):
@@ -65,24 +65,24 @@ class BuffButton(FieldButton[Field]):
         player.Position.set_y(self.buff.Position.y) # type: ignore
 
         match self.buff.Stat:
-            case game.BuffStat.Strength:
+            case core.BuffStat.Strength:
                 player.Strength += 25
-            case game.BuffStat.Armor:
+            case core.BuffStat.Armor:
                 player.Armor += 15
-            case game.BuffStat.Intelligence:
+            case core.BuffStat.Intelligence:
                 player.Intelligence += 25
-            case game.BuffStat.Perception:
+            case core.BuffStat.Perception:
                 player.Perception += 15
-            case game.BuffStat.Health:
+            case core.BuffStat.Health:
                 player.cHealth += 50
-            case game.BuffStat.Stamina:
+            case core.BuffStat.Stamina:
                 player.cStamina += 25
         await interaction.response.edit_message(embed=self.view.embed, view=self.view)
         self.view.stop() # type: ignore
 
 
 class EmptyButton(FieldButton[Field]):
-    def __init__(self, position: game.Position, disable: bool = True):
+    def __init__(self, position: core.Position, disable: bool = True):
         super().__init__(row=position.y, force_disable=disable)
         self.position = position
 
@@ -102,7 +102,7 @@ class FightField(Field):
         players: list[Player],
         targets: list[Player],
         prob: int,
-        buff: game.Buff
+        buff: core.Buff
     ):
 
         super().__init__(player, players, prob, buff)
@@ -129,7 +129,7 @@ class FightField(Field):
                         self.__place_player(placeable, targets)
 
                     else: 
-                        assert isinstance(placeable, game.Buff)
+                        assert isinstance(placeable, core.Buff)
                         self.__place_buff(placeable)
 
                 else:
@@ -145,7 +145,7 @@ class FightField(Field):
         else:
             self.add_item(TargetPlayerButton(placeable, label, style, disabled))
 
-    def __place_buff(self, buff: game.Buff):
+    def __place_buff(self, buff: core.Buff):
         label = self._button_buff_label(buff)
         self.add_item(BuffButton(buff, label))
 
@@ -169,12 +169,12 @@ class MovingField(Field):
         player: Player,
         players: list[Player],
         prob: int,
-        buff: game.Buff
+        buff: core.Buff
     ):
         
         self.player = player
         self.result: res.EResult | None = None
-        self.target: game.Position | None = None
+        self.target: core.Position | None = None
 
         super().__init__(player, players, prob, buff)
         self.embed = discord.Embed(
@@ -189,7 +189,7 @@ class MovingField(Field):
                 self._position.set_y(y)
                 if self._position in self._placed:
                     placeable = self._placed[self._position]
-                    if isinstance(placeable, game.Buff):
+                    if isinstance(placeable, core.Buff):
                         self.add_item(BuffButton(placeable, self._button_buff_label(placeable), False))
                     else:
                         assert isinstance(placeable, Player)
@@ -212,7 +212,7 @@ class WaitingField(Field):
         players: list[Player],
         current_player: Player,
         prob: int,
-        buff: game.Buff
+        buff: core.Buff
     ):
 
         super().__init__(player, players, prob, buff)
@@ -226,7 +226,7 @@ class WaitingField(Field):
                 self._position.set_y(y)
                 if self._position in self._placed:
                     placeable = self._placed[self._position]
-                    if isinstance(placeable, game.Buff):
+                    if isinstance(placeable, core.Buff):
                         self.add_item(BuffButton(placeable, self._button_buff_label(placeable)))
                     else:
                         assert isinstance(placeable, Player)

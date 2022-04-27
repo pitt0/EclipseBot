@@ -2,9 +2,9 @@ from typing import TypeVar
 
 import discord
 
-from game import Player, EActivity
+from core import Player, EActivity
 from ..info import Info
-import game
+import core
 
 
 V = TypeVar('V', bound='discord.ui.View', covariant=True)
@@ -14,8 +14,8 @@ class FieldButton(discord.ui.Button[V]):
 
     def __init__(
         self,
-        placeable: game.HasPosition | None = None,
-        position: game.Position | None = None,
+        placeable: core.HasPosition | None = None,
+        position: core.Position | None = None,
         label: str = '\u200b',
         row: int = 0,
         style: discord.ButtonStyle = discord.ButtonStyle.grey,
@@ -63,12 +63,12 @@ class Field(discord.ui.View):
         player: Player,
         players: list[Player],
         prob: int,
-        buff: game.Buff,
+        buff: core.Buff,
     ) -> None:
         
         super().__init__(timeout=None)
-        self._placed: dict[game.Position, game.HasPosition] = {}
-        self._position = game.Position(0, 0)
+        self._placed: dict[core.Position, core.HasPosition] = {}
+        self._position = core.Position(0, 0)
         self.embed = discord.Embed()
 
         self._place_players(player.team, players)
@@ -77,16 +77,16 @@ class Field(discord.ui.View):
             self._place_buff(buff)
             
                 
-    def _place_players(self, team: game.ETeam, players: list[Player]):
+    def _place_players(self, team: core.ETeam, players: list[Player]):
         for player in players:
             if not player.Alive:
                 continue
             if player.Position is None:
-                pCoordinates = player.Coordinates(self._placed, game.AS.Player if player.team == team else game.AS.Enemy)
+                pCoordinates = player.Coordinates(self._placed, core.AS.Player if player.team == team else core.AS.Enemy)
                 player.Position = pCoordinates
             self._placed[player.Position] = player
 
-    def _place_buff(self, buff: game.Buff):
+    def _place_buff(self, buff: core.Buff):
         assert buff.Position is not None
         if buff.Position not in self._placed:
             self._placed[buff.Position] = buff
@@ -105,15 +105,15 @@ class Field(discord.ui.View):
 
         return discord.ButtonStyle.grey
 
-    def _button_buff_label(self, buff: game.Buff):
+    def _button_buff_label(self, buff: core.Buff):
         match buff.Stat:
-            case game.BuffStat.Health:
+            case core.BuffStat.Health:
                 return 'Hp +50'
-            case game.BuffStat.Stamina:
+            case core.BuffStat.Stamina:
                 return 'St +25'
-            case game.BuffStat.Strength | game.BuffStat.Intelligence:
+            case core.BuffStat.Strength | core.BuffStat.Intelligence:
                 return f'{buff.Stat.name[:2]} +25'
-            case game.BuffStat.Armor | game.BuffStat.Perception:
+            case core.BuffStat.Armor | core.BuffStat.Perception:
                 return f'{buff.Stat.name[:2]} +15'
 
 

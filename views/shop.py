@@ -1,5 +1,5 @@
 import discord
-import game
+import core
 from discord import SelectOption
 
 
@@ -13,73 +13,73 @@ __all__ = (
 
 
 SHADOW_ITEMS = [
-    SelectOption(label=f"Corrupted Rod ({game.CorruptedRod.cost}g)", value='6', description=game.CorruptedRod.Brief),
-    SelectOption(label=f"Cursed Blade ({game.CursedBlade.cost}g)", value='1', description=game.CursedBlade.Brief),
-    SelectOption(label=f"Dimensional Sphere ({game.DimensionalSphere.cost}g)", value='2', description=game.DimensionalSphere.Brief),
-    SelectOption(label=f"Dreadful Spell Book {game.DreadfulSpellBook.cost}g", value='3', description=game.DreadfulSpellBook.Brief),
-    SelectOption(label=f"Raging Sword ({game.RagingSword.cost}g)", value='4', description=game.RagingSword.Brief),
-    SelectOption(label=f"Reaper Bow ({game.ReaperBow.cost}g)", value='5', description=game.ReaperBow.Brief),
-    SelectOption(label=f"Shadow's Dagger ({game.ShadowsDagger.cost}g)", value='7', description=game.ShadowsDagger.Brief)
+    SelectOption(label=f"Corrupted Rod ({core.CorruptedRod.cost}g)", value='6', description=core.CorruptedRod.Brief),
+    SelectOption(label=f"Cursed Blade ({core.CursedBlade.cost}g)", value='1', description=core.CursedBlade.Brief),
+    SelectOption(label=f"Dimensional Sphere ({core.DimensionalSphere.cost}g)", value='2', description=core.DimensionalSphere.Brief),
+    SelectOption(label=f"Dreadful Spell Book {core.DreadfulSpellBook.cost}g", value='3', description=core.DreadfulSpellBook.Brief),
+    SelectOption(label=f"Raging Sword ({core.RagingSword.cost}g)", value='4', description=core.RagingSword.Brief),
+    SelectOption(label=f"Reaper Bow ({core.ReaperBow.cost}g)", value='5', description=core.ReaperBow.Brief),
+    SelectOption(label=f"Shadow's Dagger ({core.ShadowsDagger.cost}g)", value='7', description=core.ShadowsDagger.Brief)
 ]
 
 NOBLE_ITEMS = [
-    SelectOption(label=f"Core Spear ({game.CoreSpear.cost}g)", value='1', description=game.CoreSpear.Brief),
-    SelectOption(label=f"Elemental Bow ({game.ElementalBow.cost}g)", value='2', description=game.ElementalBow.Brief),
-    SelectOption(label=f"Enlightened Bow ({game.EnlightenedBow.cost}g)", value='3', description=game.EnlightenedBow.Brief),
-    SelectOption(label=f"Icebound Axe ({game.IceboundAxe.cost}g)", value='4', description=game.IceboundAxe.Brief),
-    SelectOption(label=f"Noble's Tome ({game.NoblesTome.cost}g)", value='5', description=game.NoblesTome.Brief),
-    SelectOption(label=f"Sharpened Katana ({game.SharpenedKatana.cost}g)", value='6', description=game.SharpenedKatana.Brief),
+    SelectOption(label=f"Core Spear ({core.CoreSpear.cost}g)", value='1', description=core.CoreSpear.Brief),
+    SelectOption(label=f"Elemental Bow ({core.ElementalBow.cost}g)", value='2', description=core.ElementalBow.Brief),
+    SelectOption(label=f"Enlightened Bow ({core.EnlightenedBow.cost}g)", value='3', description=core.EnlightenedBow.Brief),
+    SelectOption(label=f"Icebound Axe ({core.IceboundAxe.cost}g)", value='4', description=core.IceboundAxe.Brief),
+    SelectOption(label=f"Noble's Tome ({core.NoblesTome.cost}g)", value='5', description=core.NoblesTome.Brief),
+    SelectOption(label=f"Sharpened Katana ({core.SharpenedKatana.cost}g)", value='6', description=core.SharpenedKatana.Brief),
 ]
 
 def shadow_item(click: int, user: discord.User | discord.Member, view: 'Shop'):
     match click:
         case 1:
-            view.player = game.Rogue(user)
-            weapon = game.CursedBlade
+            view.player = core.Rogue(user)
+            weapon = core.CursedBlade
         case 2:
-            view.player = game.Shaman(user)
-            weapon = game.DimensionalSphere
+            view.player = core.Shaman(user)
+            weapon = core.DimensionalSphere
         case 3:
-            view.player = game.Wizard(user)
-            weapon = game.DreadfulSpellBook
+            view.player = core.Wizard(user)
+            weapon = core.DreadfulSpellBook
         case 4:
-            view.player = game.Swordsman(user)
-            weapon = game.RagingSword
+            view.player = core.Swordsman(user)
+            weapon = core.RagingSword
         case 5:
-            view.player = game.Archer(user)
-            weapon = game.ReaperBow
+            view.player = core.Archer(user)
+            weapon = core.ReaperBow
         case 6:
-            view.player = game.Necromancer(user)
-            weapon = game.CorruptedRod
+            view.player = core.Necromancer(user)
+            weapon = core.CorruptedRod
         case 7:
-            view.player = game.Assassin(user)
-            weapon = game.ShadowsDagger
+            view.player = core.Assassin(user)
+            weapon = core.ShadowsDagger
 
-    view.player.team = game.ETeam.Shadow # Player is a new class now
+    view.player.team = core.ETeam.Shadow # Player is a new class now
     view.player.EquipWeapon(weapon) # type: ignore
 
 def noble_item(click: int, user: discord.User | discord.Member, view: 'Shop'):
     match click:
         case 1:
-            view.player = game.Lancer(user)
-            weapon = game.CoreSpear
+            view.player = core.Lancer(user)
+            weapon = core.CoreSpear
         case 2:
-            view.player = game.Archer(user)
-            weapon = game.ElementalBow
+            view.player = core.Archer(user)
+            weapon = core.ElementalBow
         case 3:
-            view.player = game.Archer(user)
-            weapon = game.EnlightenedBow
+            view.player = core.Archer(user)
+            weapon = core.EnlightenedBow
         case 4:
-            view.player = game.Fighter(user)
-            weapon = game.IceboundAxe
+            view.player = core.Fighter(user)
+            weapon = core.IceboundAxe
         case 5:
-            view.player = game.Magician(user)
-            weapon = game.NoblesTome
+            view.player = core.Magician(user)
+            weapon = core.NoblesTome
         case 6:
-            view.player = game.Samurai(user)
-            weapon = game.SharpenedKatana
+            view.player = core.Samurai(user)
+            weapon = core.SharpenedKatana
 
-    view.player.team = game.ETeam.Noble
+    view.player.team = core.ETeam.Noble
     view.player.EquipWeapon(weapon) # type: ignore
 
 class ShadowItems(discord.ui.Select["Shop"]):
@@ -115,33 +115,21 @@ class Shop(discord.ui.View):
         Player instance.
     """
     
-    def __init__(self, player: game.Player):
+    def __init__(self, player: core.Player):
         super().__init__()
         self.player = player
-        if not player.bot:
-            self.content = None
-            self.embed = discord.Embed(
-                title="Buy an Item",
-                description='Increased Power means Increased Strength and Increased Intelligence',
-                color=player.color
-                )
-            self.message: discord.Message = None # type: ignore
-            match player.team:
-                case game.ETeam.Shadow:
-                    self.embed.set_image(url='https://i.pinimg.com/236x/23/0a/18/230a18bbbf15c45a565bf257edb15e6d.jpg')
-                    sel = ShadowItems()
-                case game.ETeam.Noble:
-                    self.embed.set_image(url='https://i.pinimg.com/236x/b0/c7/26/b0c72658f75353aecbd210658c202a3c.jpg')
-                    sel = NobleItems()
+        self.embed = discord.Embed(
+            title="Buy an Item",
+            description='Increased Power means Increased Strength and Increased Intelligence',
+            color=player.color
+            )
+        self.message: discord.Message = None # type: ignore
+        match player.team:
+            case core.ETeam.Shadow:
+                self.embed.set_image(url='https://i.pinimg.com/236x/23/0a/18/230a18bbbf15c45a565bf257edb15e6d.jpg')
+                sel = ShadowItems()
+            case core.ETeam.Noble:
+                self.embed.set_image(url='https://i.pinimg.com/236x/b0/c7/26/b0c72658f75353aecbd210658c202a3c.jpg')
+                sel = NobleItems()
 
-            self.add_item(sel)
-        
-        else:
-            # The only bot player should be Cortana
-            self.embed = None
-            match player.team:
-                case game.ETeam.Shadow:
-                    self.content = f"Scegli tra {' '.join(opt.label for opt in SHADOW_ITEMS)}"
-                case game.ETeam.Noble:
-                    self.content = f"Scegli tra {' '.join(opt.label for opt in NOBLE_ITEMS)}"
-                
+        self.add_item(sel)

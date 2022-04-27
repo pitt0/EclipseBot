@@ -1,10 +1,10 @@
 import discord
 
 from .field import *
-from game import Player
+from core import Player
 
 import resources as res
-import game
+import core
 
 __all__ = (
     'AbilityButton', 
@@ -23,7 +23,7 @@ class AbilityButton(discord.ui.Button['VAbilities']):
     disabled :class:`bool`
         Whether the ability is clickable or not
     """
-    def __init__(self, ability: game.Ability, disabled: bool):
+    def __init__(self, ability: core.Ability, disabled: bool):
         super().__init__(label=str(ability), row=0, disabled=disabled)
         self.ability = ability
 
@@ -103,17 +103,15 @@ class VAbilities(discord.ui.View):
 
         self.player = player
         abilities = player.Abilities
-        disabled = False
         for ability in abilities:
-            
             disabled = False
             match ability.cost_type:
-                case game.CostType.Stamina:
+                case core.CostType.Stamina:
                     disabled = self.player.cStamina < ability.cost
-                case game.CostType.Health:
+                case core.CostType.Health:
                     disabled = self.player.cHealth < ability.cost
 
-            if isinstance(player.Weapon, game.SharpenedKatana):
+            if isinstance(player.Weapon, core.SharpenedKatana):
                 print(player.Weapon.UsedAbilities)
                 if ability in player.Weapon.UsedAbilities:
                     disabled = True
@@ -177,7 +175,7 @@ class MoveChoice(discord.ui.View):
         The result of player's action.
     """
 
-    def __init__(self, player: Player, players: list[Player], prob: int, buff: game.Buff):
+    def __init__(self, player: Player, players: list[Player], prob: int, buff: core.Buff):
         super().__init__(timeout=None)
         self.player = player
         self.allies = [pl for pl in players if pl.team == player.team and player != pl]
@@ -198,7 +196,7 @@ class MoveChoice(discord.ui.View):
 
     @property
     def children(self) -> list[discord.ui.Button]:
-        return [child for child in super().children if isinstance(child, discord.ui.Button)]
+        return super().children # type: ignore
 
     def enable_buttons(self):
         for child in self.children:
@@ -300,13 +298,16 @@ class Attack(discord.ui.View):
         The the name of the ability that player's going to use
     cPlayer :class:`Player`
         The player that is attacking
-    attack_type :enum:`EAttackType`
-        The type of attack user chose is.
+    players :class: `list[Player]`
+        The players list
     """
+
+    result: res.EResult
+    __messages: list[discord.Message] = []
 
     def __init__(self,
         view: VAbilities | MoveChoice,
-        move: game.Ability,
+        move: core.Ability,
         cPlayer: Player,
         players: list[Player],
     ):
@@ -314,19 +315,14 @@ class Attack(discord.ui.View):
         super().__init__(timeout=None)
         self.previous = view
         self.lobby = players
-
-        self.result: res.EResult
         
         self.embed = discord.Embed(title=move, description=cPlayer.Weapon.Name, color=cPlayer.color)
         self.embed.set_image(url=cPlayer.Weapon.Image)
         self.embed.add_field(name='Description', value=move.long)
 
-        self.__messages: list[discord.Message] = []
-
-
     @property
     def children(self) -> list[discord.ui.Button]:
-        return [child for child in super().children if isinstance(child, discord.ui.Button)]
+        return super().children # type: ignore
     
     async def wait_for_players(self):
         await self.wait_players()
