@@ -29,12 +29,12 @@ class PvPGame(abc.InGuildGame):
         self.players.sort(key=lambda p: p.Speed) # should be in super().fight()
 
         while (
-            any(player.Alive for player in self.players if player.team is core.ETeam.Shadow) 
+            any(player.Alive for player in self.shadows) 
             and 
-            any(player.Alive for player in self.players if player.team is core.ETeam.Noble)
+            any(player.Alive for player in self.nobles)
         ):
 
-            # A turn passes when all the players have done their move
+            # A turn passes when all the players did their move
             turn.change()
 
             # Start of Turn
@@ -46,16 +46,15 @@ class PvPGame(abc.InGuildGame):
                 move = await self.init_turn(turn, current_player)
                 current_player.AfterAttack()
 
-                for message in self.messages:
-                    await message.delete()
+                await self.delete_messages()
 
-                embed = await self.TurnRecap(turn, move.result)
+                embed = await self.turn_recap(turn, move.result)
                 for player in self.players:
                     await player.send(embed=embed)
 
 
-                if self.CheckTeams():
-                    await self.EndGame()
+                if self.check_teams():
+                    await self.end_game()
 
             # End Turn
             for player in self.players:
@@ -65,10 +64,10 @@ class PvPGame(abc.InGuildGame):
                         await player.send(log)
 
                 
-                if self.CheckTeams():
-                    await self.EndGame()
+                if self.check_teams():
+                    await self.end_game()
         
-        await self.EndGame()
+        await self.end_game()
 
         
 

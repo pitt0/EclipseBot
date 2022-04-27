@@ -35,24 +35,45 @@ class Game:
 
     players: list[Player]
     __messages: list[discord.Message]
+    shadows: list[Player]
+    nobles: list[Player]
 
     @property
     def teams(self) -> discord.Embed:
         print('debug')
-        shadows = [player for player in self.players if player.team is core.ETeam.Shadow]
-        nobles = [player for player in self.players if player.team is core.ETeam.Noble]
 
         embed = discord.Embed(title='Teams', color=discord.Colour.purple())
-        embed.add_field(name='Shadows', value='\n'.join(player.mention for player in shadows))
+        embed.add_field(name='Shadows', value='\n'.join(player.mention for player in self.shadows))
         
-        if len(shadows) > len(nobles): length = len(shadows)
-        else: length = len(nobles)
+        if len(self.shadows) > len(self.nobles): length = len(self.shadows)
+        else: length = len(self.nobles)
         
         embed.add_field(name='-', value='\n'.join('-' for _ in range(length)))
 
-        embed.add_field(name='Nobles', value='\n'.join(player.mention for player in nobles))
+        embed.add_field(name='Nobles', value='\n'.join(player.mention for player in self.nobles))
 
-        return embed 
+        return embed
+
+    async def turn_recap(self, turn: Turn, result: str) -> discord.Embed:
+        embed = discord.Embed(
+            title=f'Turn {turn} • Attack Result',
+            description=result,
+            color=discord.Color.blue()
+        )
+        if any(not player.Alive for player in self.players):
+            embed.add_field(
+                name='Dead Shadows', 
+                value=''.join(f'{shadow.name}\n' for shadow in self.shadows if not shadow.Alive) if any(not shadow.Alive for shadow in self.shadows) else '-', 
+                inline=True)
+            embed.add_field(
+                name='Dead Nobles', 
+                value=''.join(f'{noble.name}\n' for noble in self.nobles if not noble.Alive) if any(not noble.Alive for noble in self.nobles) else '-', 
+                inline=True)
+
+        return embed
+
+    def check_teams(self) -> bool:
+        return all(not player.Alive for player in self.shadows) or all(not player.Alive for player in self.nobles)
 
     async def start(self) -> None:
         ...
@@ -61,16 +82,22 @@ class Game:
         for player in self.players:
             player.activity = status
 
+    async def end_game(self) -> None:
+        winners = 'Shadows' if any(shadow.Alive for shadow in self.players if shadow.team is core.ETeam.Shadow) else 'Nobles'
+        for player in self.players:
+            await player.send(f"Game ended\n{winners} win.")
+        raise GameEnded(f'{winners} win')
+
     async def init_lobby(self) -> None:
         ...
 
     async def fight(self) -> None:
         ...
 
-    async def init_turn(self, turn: Turn, current: Player, player: Player) -> choice.MoveChoice:
+    async def init_turn(self, turn: Turn, current: Player) -> choice.MoveChoice:
         self.__messages = []
-        move = choice.MoveChoice(player, self.players, turn.prob, turn.buff)
-        self.__messages.append(await player.send(embed=move.embed, view=move))
+        move = choice.MoveChoice(current, self.players, turn.prob, turn.buff)
+        self.__messages.append(await current.send(embed=move.embed, view=move))
 
         for player in self.players:
             if player == current:
@@ -120,6 +147,8 @@ class InGuildGame(Game):
         await _message.delete()
         if any(player.team is None for player in teams.players):
             raise GameEnded("Someone has not chosen a team.")
+        self.shadows = [player for player in self.players if player.team is core.ETeam.Shadow]
+        self.nobles = [player for player in self.players if player.team is core.ETeam.Noble]
 
     async def shop(self) -> None:
         shops: list[choice.Shop] = []
