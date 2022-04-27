@@ -24,7 +24,7 @@ class Teams(discord.ui.View):
 
     @property
     def children(self) -> list[discord.ui.Button]:
-        return [child for child in super().children if hasattr(child, 'disabled')] # type: ignore
+        return super().children # type: ignore
 
     async def update_embed(self):
         shadows = [player for player in self.players if player.team is ETeam.Shadow]
