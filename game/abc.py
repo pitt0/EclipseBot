@@ -40,15 +40,14 @@ class Game:
 
     @property
     def teams(self) -> discord.Embed:
-        print('debug')
-
+        # This works like a function, everytime you use it, even if like a variable, it comes called
         embed = discord.Embed(title='Teams', color=discord.Colour.purple())
         embed.add_field(name='Shadows', value='\n'.join(player.mention for player in self.shadows))
         
         if len(self.shadows) > len(self.nobles): length = len(self.shadows)
         else: length = len(self.nobles)
         
-        embed.add_field(name='-', value='\n'.join('-' for _ in range(length)))
+        embed.add_field(name='|', value='\n'.join('\u200b' for _ in range(length)))
 
         embed.add_field(name='Nobles', value='\n'.join(player.mention for player in self.nobles))
 

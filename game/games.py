@@ -2,7 +2,6 @@ from discord.ext import commands
 
 import core
 from . import abc # from `here` import `module`
-import views as choice
 
 
 
@@ -21,7 +20,6 @@ class PvPGame(abc.InGuildGame):
             player.activity = core.EActivity.ChoosingWeapon
 
         await self.shop()
-        await self._channel.send()
 
     async def fight(self) -> None:
 
