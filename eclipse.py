@@ -20,7 +20,6 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
-    await bot.load_extension('cog')
     now = datetime.datetime.now(tz=pytz.timezone('Europe/Rome'))
     print(f"[{now.strftime('%H:%M:%S')}] Bot started.")
 
@@ -35,12 +34,8 @@ async def start_game(ctx: commands.Context):
         return
 
     game_instances[ctx.guild.id] = PvPGame(ctx)
-    try:
-        await game_instances[ctx.guild.id].start()
-    except Exception as e:
-        del game_instances[ctx.guild.id]
-        print(e)
-        return
+    await game_instances[ctx.guild.id].start()
+    
 
 
 if __name__ == '__main__':

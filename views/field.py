@@ -83,7 +83,7 @@ class BuffButton(FieldButton[Field]):
 
 class EmptyButton(FieldButton[Field]):
     def __init__(self, position: core.Position, disable: bool = True):
-        super().__init__(row=position.y, force_disable=disable)
+        super().__init__(position=position, force_disable=disable)
         self.position = position
 
     async def callback(self, interaction: discord.Interaction):

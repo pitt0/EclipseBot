@@ -20,10 +20,11 @@ class PvPGame(abc.InGuildGame):
             player.activity = core.EActivity.ChoosingWeapon
 
         await self.shop()
+        await self.fight()
 
     async def fight(self) -> None:
 
-        turn = abc.Turn() # should not be in super().fight()
+        turn = abc.Turn()
         self.players.sort(key=lambda p: p.Speed) # should be in super().fight()
 
         while (

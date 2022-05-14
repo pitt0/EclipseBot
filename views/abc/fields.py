@@ -32,8 +32,8 @@ class FieldButton(discord.ui.Button[V]):
         self.placeable = placeable
         self.position = position or self.placeable.Position # type: ignore
 
-        if row == 0 and placeable is not None:
-            row = placeable.Position.y # type: ignore
+        if row == 0 and self.position is not None:
+            row = self.position.y
 
         if _force:
             # `if 0` is considered as `if False`, `if 1` is considered as `if True`
